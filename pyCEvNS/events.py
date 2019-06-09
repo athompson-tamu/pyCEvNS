@@ -60,11 +60,10 @@ def eff_coherent(er):
 
 
 def rates_cc(ev, fx: Flux, flavor='e', f=None, **kwargs):
-  sigma = ((2 / np.pi) * m_neutron * ev * (gf)**2 ) * fx.flux(ev, flavor=flavor, f=f, **kwargs)
   if (flavor == 'e' or flavor == 'mu' or flavor == 'tau'):
-    return sigma
+    return ((2 / np.pi) * m_neutron * ev * (gf)**2 ) * fx.flux(ev, flavor=flavor, f=f, **kwargs)
   if (flavor == 'ebar' or flavor == 'mubar' or flavor == 'taubar'):
-    return sigma / 3
+    return (1 / 3)* ((2 / np.pi) * m_proton * ev * (gf)**2 ) * fx.flux(ev, flavor=flavor, f=f, **kwargs)
 
 
 def rates_nucleus(er, det: Detector, fx: Flux, efficiency=None, f=None, nsip=NSIparameters(), flavor='e',
