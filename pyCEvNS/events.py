@@ -31,17 +31,17 @@ class EventGen(ABC):
         pass
 
 
-def formfsquared(q, rn=5.5):
+def formfsquared(q, a):
     """
     form factor squared
-    1810.05606
+    Engel, 1991
     :param q: momentum transfered
-    :param rn: neutron skin radius
+    :param a: number of nucleons
     :return: form factor squared
     """
-    r = rn * (10 ** -15) / meter_by_mev
-    s = 0.9 * (10 ** -15) / meter_by_mev
-    r0 = np.sqrt(5 / 3 * (r ** 2) - 5 * (s ** 2))
+    r = 1.2 * (10 ** -15) * (a ** (1 / 3)) / meter_by_mev
+    s = 0.5 * (10 ** -15) / meter_by_mev
+    r0 = np.sqrt(r ** 2 - 5 * (s ** 2))
     return (3 * spherical_jn(1, q * r0) / (q * r0) * np.exp((-(q * s) ** 2) / 2)) ** 2
 
 
@@ -57,6 +57,14 @@ def eff_coherent(er):
     if pe < 6:
         return 0.5 * f
     return f
+
+
+def rates_cc(ev, fx: Flux, flavor='e', f=None, **kwargs):
+  sigma = ((2 / np.pi) * m_neutron * ev * (gf)**2 ) * fx.flux(ev, flavor=flavor, f=f, **kwargs)
+  if (flavor == 'e' or flavor == 'mu' or flavor == 'tau'):
+    return sigma
+  if (flavor == 'ebar' or flavor == 'mubar' or flavor == 'taubar'):
+    return sigma / 3
 
 
 def rates_nucleus(er, det: Detector, fx: Flux, efficiency=None, f=None, nsip=NSIparameters(), flavor='e',
@@ -153,13 +161,13 @@ def rates_nucleus(er, det: Detector, fx: Flux, efficiency=None, f=None, nsip=NSI
                                          2 * er * fx.fintinv(er, det.m, flavor=flavor, f=f, epsi=nsip, op=op, **kwargs) +
                                          er * er * fx.fintinvs(er, det.m, flavor=flavor, f=f, epsi=nsip, op=op, **kwargs) -
                                          det.m * er * fx.fintinvs(er, det.m, flavor=flavor, f=f, epsi=nsip, op=op, **kwargs)) *
-                   det.m * qvs * ffs(np.sqrt(2 * det.m * er), **kwargs), det.frac) * efficiency(er)
+                   det.m * qvs * ffs(np.sqrt(2 * det.m * er), det.z + det.n), det.frac) * efficiency(er)
     else:
         return np.dot(2 / np.pi * (gf ** 2) * (2 * fx.fint(er, det.m, flavor=flavor, f=f, epsi=nsip, op=op, **kwargs) -
                                          2 * er * fx.fintinv(er, det.m, flavor=flavor, f=f, epsi=nsip, op=op, **kwargs) +
                                          er * er * fx.fintinvs(er, det.m, flavor=flavor, f=f, epsi=nsip, op=op, **kwargs) -
                                          det.m * er * fx.fintinvs(er, det.m, flavor=flavor, f=f, epsi=nsip, op=op, **kwargs)) *
-                   det.m * qvs * ffs(np.sqrt(2 * det.m * er), **kwargs), det.frac)
+                   det.m * qvs * ffs(np.sqrt(2 * det.m * er), det.z + det.n), det.frac)
 
 
 def rates_electron(er, det: Detector, fx: Flux, efficiency=None, f=None, nsip=NSIparameters(), flavor='e',
@@ -239,6 +247,14 @@ def binned_events_electron(era, erb, expo, det: Detector, fx: Flux, nsip: NSIpar
         expo * mev_per_kg * 24 * 60 * 60 / np.dot(det.m, det.frac)
 
 
+def binned_events_cc(eva, evb, expo, det: Detector, fx: Flux, f=None, flavor='e', **kwargs):
+    # Return number of CC interactions (presumably with outgoing leptons and nucleons) in bin (eva, evb)
+    def rates(ev):
+        return rates_cc(ev, fx, flavor=flavor,f=f, **kwargs)
+    return quad(rates, eva, evb)[0] * \
+        expo * mev_per_kg * 24 * 60 * 60 / np.dot(det.m, det.frac)
+
+
 class NSIEventsGen(EventGen):
     def __init__(self, flux: Flux, detector: Detector, expo: float, target='nucleus', nsi_param=NSIparameters(),
                  osci_param=oscillation_parameters(), osci_func=None, formfactsq=formfsquared, q2form=False, efficiency=None):
@@ -256,21 +272,19 @@ class NSIEventsGen(EventGen):
     def rates(self, er, flavor='e', **kwargs):
         if self.target == 'nucleus':
             return rates_nucleus(er, self.detector, self.flux, efficiency=self.efficiency, f=self.osci_func,
-                                 nsip=self.nsi_param, flavor=flavor, op=self.osci_param, ffs=self.formfactsq, q2=self.q2form, **kwargs)
+                                 nsip=self.nsi_param, flavor=flavor, op=self.osci_param, ffs=self.formfactsq, q2=self.q2form)
         elif self.target == 'electron':
             return rates_electron(er, self.detector, self.flux, efficiency=self.efficiency, f=self.osci_func,
-                                  nsip=self.nsi_param, flavor=flavor, op=self.osci_param, **kwargs)
+                                  nsip=self.nsi_param, flavor=flavor, op=self.osci_param)
         else:
             raise Exception('Target should be either nucleus or electron!')
 
     def events(self, ea, eb, flavor='e', **kwargs):
         if self.target == 'nucleus':
             return binned_events_nucleus(ea, eb, self.expo, self.detector, self.flux, nsip=self.nsi_param, flavor=flavor,
-                                         efficiency=self.efficiency, f=self.osci_func, op=self.osci_param, q2=self.q2form, **kwargs)
+                                         efficiency=self.efficiency, f=self.osci_func, op=self.osci_param, q2=self.q2form)
         elif self.target == 'electron':
             return binned_events_electron(ea, eb, self.expo, self.detector, self.flux, nsip=self.nsi_param,
-                                          flavor=flavor, op=self.osci_param, efficiency=self.efficiency, **kwargs)
+                                          flavor=flavor, op=self.osci_param, efficiency=self.efficiency)
         else:
             return Exception('Target should be either nucleus or electron!')
-
-
