@@ -31,7 +31,7 @@ class EventGen(ABC):
         pass
 
 
-def formfsquared(q, rn=5.5, **kwargs):
+def formfsquared(q, rn=5.5):
     """
     form factor squared
     1810.05606
@@ -287,3 +287,5 @@ class NSIEventsGen(EventGen):
                                           flavor=flavor, op=self.osci_param, efficiency=self.efficiency, **kwargs)
         else:
             return Exception('Target should be either nucleus or electron!')
+
+
