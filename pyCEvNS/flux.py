@@ -725,19 +725,19 @@ class NeutrinoFluxFactory:
             far_beam_txt = 'data/dune_beam_fd_nu_flux_120GeVoptimized.txt'
             f_beam = np.genfromtxt(pkg_resources.resource_filename(__name__, far_beam_txt), delimiter=',')
             nu = {'ev': f_beam[:, 0],
-                  'e': f_beam[:, 2],
-                  'mu': f_beam[:, 3],
-                  'ebar': f_beam[:, 5],
-                  'mubar': f_beam[:, 6]}
+                  'e': f_beam[:, 1],
+                  'mu': f_beam[:, 2],
+                  'ebar': f_beam[:, 4],
+                  'mubar': f_beam[:, 5]}
             return NeutrinoFlux(continuous_fluxes=nu)
         if flux_name == 'far_beam_nubar':
             far_beam_txt = 'data/dune_beam_fd_antinu_flux_120GeVoptimized.txt'
             f_beam = np.genfromtxt(pkg_resources.resource_filename(__name__, far_beam_txt), delimiter=',')
             nu = {'ev': f_beam[:, 0],
-                  'e': f_beam[:, 2],
-                  'mu': f_beam[:, 3],
-                  'ebar': f_beam[:, 5],
-                  'mubar': f_beam[:, 6]}
+                  'e': f_beam[:, 1],
+                  'mu': f_beam[:, 2],
+                  'ebar': f_beam[:, 4],
+                  'mubar': f_beam[:, 5]}
             return NeutrinoFlux(continuous_fluxes=nu)
         if flux_name == 'atmospheric':
             if 'zenith' not in kwargs:
