@@ -17,11 +17,13 @@ from pyCEvNS.oscillation import*
 
 
 # Take in an nsi and return # of events integrated over energy and zenith
-def EventsGenerator(nsi_array, expo, flux_factory, osc_factory):
+def EventsGenerator(nsi_array, expo, flux, osc_factory):
   det = Detector("dune")
   zenith_arr = np.round(np.linspace(-0.975,-0.025,20), decimals=3)
-  energy_arr = np.linspace(100, 1000, 19)
-  obs = np.zeros((20,18))  # 18 energy bins, 20 zenith bins
+  #energy_arr = np.linspace(100, 1000, 101)
+  energy_arr = np.array([106.00, 119.00, 133.00, 150.00, 168.00, 188.00, 211.00, 237.00, 266.00, 299.00,
+                         335.00, 376.00, 422.00, 473.00, 531.00, 596.00, 668.00, 750.00, 841.00, 944.00])
+  obs = np.zeros((20,19))  # 18 energy bins, 20 zenith bins
 
   nsi = NSIparameters(0)
   nsi.epe = {'ee': nsi_array[0], 'mm': nsi_array[1], 'tt': nsi_array[2],
@@ -31,8 +33,7 @@ def EventsGenerator(nsi_array, expo, flux_factory, osc_factory):
   for i in range (0, zenith_arr.shape[0]):
     osc = osc_factory.get(oscillator_name='atmospheric', zenith=zenith_arr[i], nsi_parameter=nsi,
                           oscillation_parameter=OSCparameters(delta=nsi_array[6]))
-    this_flux = flux_factory.get('atmospheric', zenith=zenith_arr[i])
-    transformed_flux = osc.transform(this_flux)
+    transformed_flux = osc.transform(flux[i])
     gen = NeutrinoNucleonCCQE("mu", transformed_flux)
 
     e_a = energy_arr[0]
@@ -65,7 +66,7 @@ def FlatPrior(cube, ndim, nparams):
 
 def main():
   # Set the exposure.
-  kTon = 4
+  kTon = 40
   years = 10
   days_per_year = 365
   kg_per_kton = 1000000
@@ -74,16 +75,22 @@ def main():
   # Set up factories.
   osc_factory = OscillatorFactory()
   flux_factory = NeutrinoFluxFactory()
-  
+
+  # Prepare flux.
+  z_bins = np.round(np.linspace(-0.975, -0.025, 20), decimals=3)
+  flux_list = []
+  for z in range(0, z_bins.shape[0]):
+    this_flux = flux_factory.get('atmospheric', zenith=z_bins[z])
+    flux_list.append(this_flux)
 
   # Construct test data.
   sm_params = [0, 0, 0, 0, 0, 0, 1.5 * pi]
-  sm_events = EventsGenerator(sm_params, exposure, flux_factory, osc_factory)
+  sm_events = EventsGenerator(sm_params, exposure, flux_list, osc_factory)
   null = sm_events.flatten()
   width = np.sqrt(null) + 1
 
   def LogLikelihood(cube, N, D):
-    signal = (EventsGenerator(cube, exposure, flux_factory, osc_factory)).flatten()
+    signal = (EventsGenerator(cube, exposure, flux_list, osc_factory)).flatten()
     likelihood = np.zeros(signal.shape[0])
 
     for i in range(signal.shape[0]):
@@ -95,19 +102,20 @@ def main():
 
 
   # Prepare some sample event rate plots.
-  plot = False
-  if plot == True:
-    e_bins = np.linspace(125, 975, 18)
+  do_plots = False
+  if do_plots == True:
+    e_bin_centers = np.array([112.50, 126.00, 141.50, 159.00, 178.00, 199.50, 224.00, 251.50, 282.50, 317.00,
+                              355.50, 399.00, 447.50, 502.00, 563.50, 632.00, 709.00, 795.50, 892.50])
     z_bins = np.linspace(-0.975, -0.025,20)
-    X, Y = np.meshgrid(e_bins, z_bins)
-    nsi1 = EventsGenerator([0.5, 0, 0.4, 0.2*np.exp(-1j*pi/2), 0, 0, pi/3], exposure, flux_factory, osc_factory)
+    X, Y = np.meshgrid(e_bin_centers, z_bins)
+    nsi1 = EventsGenerator([0.5, 0, 0.4, 0.2*np.exp(-1j*pi/2), 0, 0, pi/3], exposure, flux_list, osc_factory)
     print("sum NSI: ", np.sum(nsi1))
     print("sum SI: ", np.sum(sm_events))
 
     fig = plt.figure()
     ax = fig.gca(projection='3d')
-    surf = ax.plot_surface(X, Y, sm_events, cmap=cm.viridis, alpha=0.7,
-                           linewidth=0, antialiased=True)
+
+    surf = ax.plot_surface(X, Y, nsi1, cmap=cm.viridis, alpha=0.7)
 
     # Add a color bar which maps values to colors.
     fig.colorbar(surf, shrink=0.5, aspect=5)
@@ -116,10 +124,21 @@ def main():
     ax.set_zlabel(r"$\nu_\mu$ Counts")
     ax.set_title(r"$\epsilon_{\alpha\beta} = 0$, $\delta_{CP} = 3\pi / 2$")
 
-    plt.savefig("dune_atmos_surface_plot_si.png")
-    plt.savefig("dune_atmos_surface_plot_si.pdf")
+    plt.savefig("dune_atmos_surface_plot_nsi.png")
+    plt.savefig("dune_atmos_surface_plot_nsi.pdf")
+    plt.clf()
 
-
+    fig = plt.figure()
+    ax = fig.add_subplot(111, polar=True)
+    ax.set_theta_zero_location('N')
+    R, Z = np.meshgrid(e_bin_centers, np.arccos(z_bins))
+    c1 = ax.pcolormesh(Z, R, sm_events)
+    plt.pcolormesh(-Z, R, sm_events)
+    fig.colorbar(c1, pad=0.2)
+    #plt.plot(np.arccos(z_bins), e_bins, color='k', ls='none')
+    plt.grid()
+    plt.savefig("polar_plot_si.pdf")
+    plt.savefig("polar_plot_si.png")
 
 
   # Define model parameters
