@@ -1,6 +1,6 @@
 import numpy as np
 from scipy import stats
-from stats import norm
+from scipy.stats import norm
 import bisect as bi
 
 import seaborn as sns
@@ -44,9 +44,10 @@ class MNStats:
 class CombinedStats:
   # Takes the output from three multinest runs and a transformation matrix L
   def __init__(self, mn1, mn2, mn3, L):
-    self.e_ = MNStats(mn1)
-    self.n_ = MNStats(mn2)
-    self.o_ = MNStats(mn3)
+    self.e_ = MNStats(mn1)  # (electron)-NSI phenomenological parameter
+    self.n_ = MNStats(mn2)  # (nucleus)-NSI phenomenological parameter
+    self.o_ = MNStats(mn3)  # (oscillation)-NSI phenomenological parameter
+    self.L = L
     self.L_inv = np.linalg.inv(L)
     self.L_inv_2 = np.square(self.L_inv)
 
@@ -81,11 +82,16 @@ class CombinedStats:
     var_vect = np.array([var1, var2, var3])
 
     # Apply the M transform to the array.
-    return self.MTransform(var_vect)
+    return self.MTransform(var_vect), var_vect
 
 
-  def GetCovMatr(self):
-    pass
+  def GetCovMatr(self, idx):
+    y_vars, x_vars = self.MVar(idx)
+    rho = np.empty((3,3))
+    for i in range(0, 3):
+      for j in range(0, 3):
+        rho[i][j] = np.sum(self.L[i] * self.L[j] * y_vars) / np.sqrt(x_vars[i] * x_vars[j])
+    return rho
 
 
   def GausCopula(self, R, idx):
@@ -93,7 +99,7 @@ class CombinedStats:
     ch = np.linalg.cholesky(R)
 
     # Simulate independent z1, z2, z3 from N(0,1) and transform.
-    z = np.array([norm.rvs(size=100), norm.rvs(size=100), norm.rvs(size=100)])
+    z = np.array([norm.rvs(size=50), norm.rvs(size=50), norm.rvs(size=50)])
     w = np.dot(ch.T, z)
     u = np.array([norm.cdf(w[0]), norm.cdf(w[1]), norm.cdf(w[2])])
 
@@ -105,14 +111,14 @@ class CombinedStats:
     x = np.empty_like(u)
 
     for i in range(0, u.shape[0]):
-      left_idx_1 = bi.bisect_left(f1, u[i,0])
-      left_idx_2 = bi.bisect_left(f1, u[i, 0])
-      left_idx_3 = bi.bisect_left(f1, u[i, 0])
-      f1_inv = (r1[left_idx_1] - r1[left_idx_1 + 1]) / 2
-      f2_inv = (r2[left_idx_2] - r2[left_idx_2 + 1]) / 2
-      f3_inv = (r3[left_idx_3] - r3[left_idx_3 + 1]) / 2
+      left_idx_1 = bi.bisect_left(f1, u[i, 0]) - 1
+      left_idx_2 = bi.bisect_left(f2, u[i, 1]) - 1
+      left_idx_3 = bi.bisect_left(f3, u[i, 2]) - 1
+      f1_inv = r1[left_idx_1]
+      f2_inv = r2[left_idx_2]
+      f3_inv = r3[left_idx_3]
 
-      x[i,i,i] = np.array([f1_inv, f2_inv, f3_inv])
+      x[:,i] = np.array([f1_inv, f2_inv, f3_inv])
 
     # Now we have joint distribution of X. Use the inv of L to get a distribution on Y.
     y = np.dot(self.L_inv, x)
@@ -137,15 +143,20 @@ def main():
   z = 54
 
   # Define transformation matrix.
-  u = [
+  u = np.array([
     [1, 0, 0],
     [0, 1, (2 * n + z) / (2 * z + n)],
     [1, 3, 3]
-  ]
+  ])
 
   comb_stat = CombinedStats(pheno_1, pheno_2, pheno_3, L=u)
   print(comb_stat.LExp())
   print(comb_stat.MVar(idx=0))
+
+  cov_matr = comb_stat.GetCovMatr(idx=0)
+  print(cov_matr)
+  copula_ee = comb_stat.GausCopula(R=cov_matr, idx=0)
+
 
 
 
@@ -153,5 +164,3 @@ def main():
 
 if __name__ == "__main__":
   main()
-
-  
