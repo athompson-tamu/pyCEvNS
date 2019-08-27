@@ -27,6 +27,12 @@ coef(fit)
 gf <- gofCopula(frankCopula(dim = 10, param=1.488821), z, N = 50, estim.method = "itau")
 gf
 
+	#Parametric bootstrap-based goodness-of-fit test of Frank copula, dim. d = 10,
+	#with 'method'="Sn", 'estim.method'="itau":
+
+  #data:  x
+  #statistic = 0.83916, parameter = 1.4888, p-value = 0.009804
+
 
 gf <- gofCopula(normalCopula(dim = 10), z, N = 50, estim.method = "itau")
 gf
