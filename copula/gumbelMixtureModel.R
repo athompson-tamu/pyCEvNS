@@ -1,24 +1,40 @@
-# Copula fitting.
 library(copula)
 library(VineCopula)
 
-xee <- read.table("all_nsi_vector_solar_equal_weights.txt", header=FALSE)
+# Read in the sampled distribution (equal weights) and the sample probability (posterior).
+samples <- read.table("multinest/all_nsi_vector_solar_equal_weights.txt", header=FALSE)
+post <- read.table("multinest/all_nsi_vector_solar.txt", header=FALSE)
 
-u <- pobs(as.matrix(cbind(xee[,1],xee[,2])))[,1]
-v <- pobs(as.matrix(cbind(xee[,1],xee[,2])))[,2]
+z <- pobs(as.matrix(cbind(samples[,1],samples[,2])))
 
-plot(xee[,1], xee[,2])
+plot(xee[,1], samples[,2])
+plot(xee[,1], samples[,3])
+plot(xee[,2], samples[,3])
 
-#selectedCopula <- BiCopSelect(u,v,familyset=NA)
-#selectedCopula
 
-gumbel.cop <- archmCopula("gumbel", 2)
-set.seed(500)
-m <- pobs(as.matrix(cbind(xee[,1],xee[,2])))
-fit <- fitCopula(gumbel.cop,m,method='ml')
-alpha <- coef(fit)
+# Set up the mixture.
+mGG <- mixCopula(list(gumbelCopula(5), frankCopula(2)))
+mGG
 
-copula_dist <- mvdc(copula=gumbelCopula(alpha,dim=2), margins=c(xee[,1],xee[,2]),
-                    paramMargins=list(list(mean=xee[,1], sd=xee[,2]),
-                                      list(mean=xee[,1], sd=xee[,2])))
-sim <- rmvdc(copula_dist, 3965)
+# Set theta
+getTheta(mGG, freeOnly = TRUE, attr = TRUE)
+getTheta(mGG, named=TRUE)
+copula:::isFree(mGG)
+
+# Decide which parameters to fix.
+fixedParam(mGG) <- fx <- c(FALSE, FALSE, FALSE, FALSE)
+#stopifnot(identical(copula:::isFree(mGG), !fx))
+
+fit <- fitCopula(mGG, data = z)
+print( fit )
+print( summary(fit) )
+
+
+# Now compute the marginals of our original joint distribution and simulate the fitted copula.
+df_post <- data.frame(p = post[,1], ee = post[,3])
+b <- seq(-0.5, 0.5, length.out=50)
+df_post$cdf <- cumsum(post[,1])
+df_post$grp <- cut(ee_cdf, b)
+
+
+
