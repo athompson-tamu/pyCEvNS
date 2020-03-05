@@ -13,14 +13,19 @@ class LinearInterp:
     linear interpolation that deals with numbers
     for better performance than interp1d
     """
-    def __init__(self, x: np.ndarray, y: np.ndarray):
+    def __init__(self, x: np.ndarray, y: np.ndarray, extend=False):
         self.x = x.copy()
         self.y = y.copy()
         ind = np.argsort(self.x)
         self.x = self.x[ind]
         self.y = self.y[ind]
+        self.extend = extend
 
     def __call__(self, xv):
+        if self.extend and xv < self.x[0]:
+            return self.y[0]
+        if self.extend and xv > self.x[-1]:
+            return self.y[-1]
         if xv < self.x[0] or xv > self.x[-1]:
             return 0
         elif xv == self.x[0]:
@@ -107,3 +112,52 @@ class TimeDistribution:
         self.bin_widths = bin_widths if bin_widths is not None else self.bin_widths
         self.initializer = initializer if initializer is not None else self.initializer
         self.generate_binned_probability(self.bin_centers, self.bin_widths)
+
+
+def polar_to_cartesian(r):
+    """
+    convert polar direction (zenith and azimuth to unit vector)
+    :param r: 2d array, first azimuth second cos(zenith)
+    :return: unit vector in cartesian coordinate system
+    """
+    return np.array([np.sqrt(1-r[1]**2)*np.cos(r[0]), np.sqrt(1-r[1]**2)*np.sin(r[0]), r[1]])
+
+
+def lorentz_boost(momentum, v):
+    """
+    Lorentz boost momentum to a new frame with velocity v
+    :param momentum: four vector
+    :param v: velocity of new frame, 3-dimention
+    :return: boosted momentum
+    """
+    n = v/np.sqrt(np.sum(v**2))
+    beta = np.sqrt(np.sum(v**2))
+    gamma = 1/np.sqrt(1-beta**2)
+    mat = np.array([[gamma, -gamma*beta*n[0], -gamma*beta*n[1], -gamma*beta*n[2]],
+                    [-gamma*beta*n[0], 1+(gamma-1)*n[0]*n[0], (gamma-1)*n[0]*n[1], (gamma-1)*n[0]*n[2]],
+                    [-gamma*beta*n[1], (gamma-1)*n[1]*n[0], 1+(gamma-1)*n[1]*n[1], (gamma-1)*n[1]*n[2]],
+                    [-gamma*beta*n[2], (gamma-1)*n[2]*n[0], (gamma-1)*n[2]*n[1], 1+(gamma-1)*n[2]*n[2]]])
+    return mat @ momentum
+
+
+
+# legacy
+"""
+def lorentz_boost(momentum, v):
+#  Lorentz boost momentum to a new frame with velocity v
+#  :param momentum: four vector
+#  :param v: velocity of new frame, 3-dimention
+#  :return: boosted momentum
+
+  n = v / np.sqrt(np.sum(v ** 2))
+  beta = np.sqrt(np.sum(v ** 2))
+  gamma = 1 / np.sqrt(1 - beta ** 2)
+  mat = np.array([[gamma, -gamma * beta * n[0], -gamma * beta * n[1], -gamma * beta * n[2]],
+                  [-gamma * beta * n[0], 1 + (gamma - 1) * n[0] * n[0], (gamma - 1) * n[0] * n[1],
+                   (gamma - 1) * n[0] * n[2]],
+                  [-gamma * beta * n[1], (gamma - 1) * n[1] * n[0], 1 + (gamma - 1) * n[1] * n[1],
+                   (gamma - 1) * n[1] * n[2]],
+                  [-gamma * beta * n[2], (gamma - 1) * n[2] * n[0], (gamma - 1) * n[2] * n[1],
+                   1 + (gamma - 1) * n[2] * n[2]]])
+  return np.dot(mat, momentum)
+"""
