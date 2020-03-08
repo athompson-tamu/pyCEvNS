@@ -1,0 +1,20 @@
+#!/bin/bash
+#SBATCH -J dark_photon
+#SBATCH -p hepx
+#SBATCH --time=100:00:00
+#SBATCH -n8
+#SBATCH --mem-per-cpu=2000
+#SBATCH -o %j.out
+#SBATCH -e %j.err
+
+echo "starting at `date` on `hostname`"
+
+# Print the SLURM job ID.
+echo "SLURM_JOBID=$SLURM_JOBID"
+
+# Run the vmtest application
+echo "running dark photon limits"
+python dmphoton_limits.py
+
+echo "ended at `date` on `hostname`"
+exit 0

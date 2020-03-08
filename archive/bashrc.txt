@@ -1,0 +1,67 @@
+[ -f /etc/bash.bashrc ] && . /etc/bash.bashrc
+[ -f /etc/bashrc ] && . /etc/bashrc
+umask 077
+
+# CMSSW
+export VO_CMS_SW_DIR=/cvmfs/cms.cern.ch
+source $VO_CMS_SW_DIR/cmsset_default.sh
+
+
+
+# ROOT 6 things.
+source /home/hepxadmin/root-6/root-6.12.06-install/bin/thisroot.sh
+
+# To try to avoid pythia8 errors
+export PYTHIA8DATA=/home/thompson/MG5_aMC_v2_6_4/HEPTools/pythia8/share/Pythia8/xmldoc/
+
+# For MG5 and Delphes
+export ROOTSYS=/usr
+export PATH=$PATH:$ROOTSYS/bin
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$ROOTSYS/lib
+export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:$ROOTSYS/lib
+
+# For LHAPDF to work
+export PATH=~/MG5_aMC_v2_6_4/HEPTools/lhapdf6/bin:$PATH
+export LD_LIBRARY_PATH=~/MG5_aMC_v2_6_4/HEPTools/lhapdf6/lib:$LD_LIBRARY_PATH
+export PYTHONPATH=~/MG5_aMC_v2_6_4/HEPTools/lhapdf6/lib64/python2.6/site-packages:$PYTHONPATH
+
+export DELPHES=~/MG5_aMC_v2_6_4/Delphes/
+export LD_LIBRARY_PATH=$DELPHES:$LD_LIBRARY_PATH
+
+export EXROOTANALYSIS=~/MG5_aMC_v2_6_4/ExRootAnalysis
+export LD_LIBRARY_PATH=$EXROOTANALYSIS:$LD_LIBRARY_PATH
+
+export ROOT_INCLUDE_PATH=~/MG5_aMC_v2_6_4/Delphes/
+export ROOT_INCLUDE_PATH=~/MG5_aMC_v2_6_4/Delphes/external/:$ROOT_INCLUDE_PATH
+export ROOT_INCLUDE_PATH=~/MG5_aMC_v2_6_4/Delphes/external/ExRootAnalysis/:$ROOT_INCLUDE_PATH
+export ROOT_INCLUDE_PATH=~/MG5_aMC_v2_6_4/ExRootAnalysis/:$ROOT_INCLUDE_PATH
+
+
+# Multinest
+export LD_LIBRARY_PATH=/fdata/hepx/store/user/thompson/depackage/lib:$LD_LIBRARY_PATH
+export PATH=$PATH:$HOME/.local/bin/
+export PATH=$PATH:/home/thompson/ev2/bin
+export LD_LIBRARY_PATH=~/MultiNest/lib/:$LD_LIBRARY_PATH
+
+# ALIASES
+alias root='root -l'
+alias mg5='/home/thompson/MG5_aMC_v2_6_4/bin/mg5_aMC'
+alias workdir='cd /fdata/hepx/store/user/thompson/'
+alias lhef2root='/home/thompson/MG5_aMC_v2_6_4/ExRootAnalysis/ExRootLHEFConverter'
+alias mysqueue='squeue | grep "thompson"'
+alias ma5='/home/thompson/MG5_aMC_v2_6_4/HEPTools/madanalysis5/madanalysis5/bin/ma5'
+alias vactivate='source ~/ev/bin/activate'
+
+
+# Load modules.
+
+# MG5 only compiles and runs with gcc 5.
+#module load gcc/5.2.0
+
+# New CentOS build, for pyCEvNS use these.
+module load gcc
+module load cmake/3.13.4
+module load python/3.7.2
+module load openmpi/3.1.4
+module load openblas/0.3.6
+module load scalapack/2.0.2 
