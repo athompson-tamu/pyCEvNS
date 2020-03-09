@@ -100,8 +100,6 @@ dm_events6 = GetDMEvents(m_chi=80, m_dp=200, m_med=25, g=1e-4)
 
 
 
-
-
 # Get neutrino spectrum
 flux_factory = NeutrinoFluxFactory()
 prompt_flux = flux_factory.get('coherent_prompt')

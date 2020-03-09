@@ -531,7 +531,7 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
         self.life_time = self.getLifeTime(coupling, dark_photon_mass)
         if life_time is not None:
             self.life_time = life_time * 1e-6
-        self.det_dist = detector_distance
+        self.det_dist = detector_distance  # meters
         self.pot_rate = pot_rate  # the number of POT/day in the experiment
         self.pot_mu = pot_mu * 1e-6
         self.pot_sigma = pot_sigma * 1e-6
@@ -607,13 +607,6 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
             b = 2 * np.sum(v)
             c = np.sum(pos ** 2) - self.det_dist ** 2
             if b ** 2 - 4 * a * c >= 0:
-                t_dm = (-b + np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
-                if t_dm >= 0:
-                    if self.verbose:
-                        print("adding weight", dp_wgt)
-                    self.time.append(t+t_dm)
-                    self.energy.append(dm_momentum[0])
-                    self.weight.append(dp_wgt)
                 t_dm = (-b - np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
                 if t_dm >= 0:
                     if self.verbose:
@@ -627,13 +620,6 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
             c = np.sum(pos ** 2) - self.det_dist ** 2
             if b ** 2 - 4 * a * c >= 0:
                 t_dm = (-b + np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
-                if t_dm >= 0:
-                    if self.verbose:
-                        print("adding weight", dp_wgt)
-                    self.time.append(t+t_dm)
-                    self.energy.append((dp_momentum - dm_momentum)[0])
-                    self.weight.append(dp_wgt)
-                t_dm = (-b - np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
                 if t_dm >= 0:
                     if self.verbose:
                         print("adding weight", dp_wgt)
@@ -990,12 +976,15 @@ class DMFluxFromPiMinusAbsorption:
         """
         dp_m = self.dp_mass
         dp_e = ((massofpi + massofp) ** 2 - massofn ** 2 + dp_m ** 2) / (2 * (massofpi + massofp))
+        print(dp_e, "< pi- absorption")
         dp_p = np.sqrt(dp_e ** 2 - dp_m ** 2)
         dp_v = dp_p / dp_e
         gamma = dp_e / dp_m
         tau = self.dp_life * gamma
         tf = np.random.normal(self.mu, self.sigma, self.sampling_size)  # POT
+        print(tf / c_light * meter_by_mev, "< t (pi-)")
         t = np.random.exponential(tau, self.sampling_size)  # life time of each dark photon
+        print(t / c_light * meter_by_mev, "< t_dp (pi-)")
         cs = np.random.uniform(-1, 1, self.sampling_size)  # direction of each dark photon
         # in rest frame
         estar = dp_m / 2
@@ -1016,9 +1005,11 @@ class DMFluxFromPiMinusAbsorption:
             cc = dp_v ** 2 * t[i] ** 2 - self.det_dist ** 2
             if b ** 2 - 4 * a * cc >= 0:
                 if (-b - np.sqrt(b ** 2 - 4 * a * cc)) / (2 * a) > 0:
+                    #print((-b - np.sqrt(b ** 2 - 4 * a * cc)) / (2 * a), "< t_dm (pi-)")
                     timing.append((-b - np.sqrt(b ** 2 - 4 * a * cc)) / (2 * a) + t[i] + tf[i])
                     energy.append(elab[i])
                 if (-b + np.sqrt(b ** 2 - 4 * a * cc)) / (2 * a) > 0:
+                    #print(((-b + np.sqrt(b ** 2 - 4 * a * cc)) / (2 * a))/ c_light * meter_by_mev, "< t_dm (pi-)")
                     timing.append((-b + np.sqrt(b ** 2 - 4 * a * cc)) / (2 * a) + t[i] + tf[i])
                     energy.append(elab[i])
         self.timing = np.array(timing) / c_light * meter_by_mev * 1e6
