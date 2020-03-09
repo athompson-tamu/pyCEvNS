@@ -538,6 +538,7 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
         self.pot_sample = pot_sample  # the number of POT corresponding to the supplied photon_distribution sample
         self.time = []
         self.dm_time = []
+        self.dp_time = []
         self.energy = []
         self.weight = []
         self.norm = 1
@@ -550,6 +551,7 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
 
         self.timing = np.array(self.time) * 1e6
         self.dm_timing = np.array(self.dm_time) * 1e6
+        self.dp_timing = np.array(self.dp_time) * 1e6
         normalization = self.epsilon ** 2 * (self.pot_rate / self.pot_sample) \
                         / (4 * np.pi * (self.det_dist ** 2) * 24 * 3600)\
                         * len(self.time) / len(self.photon_flux) * (meter_by_mev**2)
@@ -573,7 +575,7 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
             return
         dp_m = self.dp_m
         dp_e = photon_events[0]
-        dp_p = np.sqrt(photon_events[0] ** 2 - self.dp_m ** 2)
+        dp_p = np.sqrt(dp_e ** 2 - self.dp_m ** 2)
         dp_momentum = np.array([dp_e, 0, 0, dp_p])
 
 
@@ -588,7 +590,6 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
             t = 0
             pos = np.zeros(3)
             t += np.random.normal(self.pot_mu, self.pot_sigma)
-            #t += np.random.exponential(8.4e-17)
             t_dp = np.random.exponential(self.life_time * dp_momentum[0] / dp_m)
             pos += c_light * t_dp * np.array(
                 [dp_momentum[1] / dp_momentum[0], dp_momentum[2] / dp_momentum[0], dp_momentum[3] / dp_momentum[0]])
@@ -604,9 +605,10 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
 
             # dark matter arrives at detector, assuming azimuthal symmetric
             # append the time and energy spectrum of the DM.
+            # DM particle 1
             v = dm_momentum[1:] / dm_momentum[0] * c_light
             a = np.sum(v ** 2)
-            b = 2 * np.sum(v)
+            b = 2 * v[2] * (c_light * dp_p / dp_e) * t_dp #2 * np.sum(v) #
             c = np.sum(pos ** 2) - self.det_dist ** 2
             if b ** 2 - 4 * a * c >= 0:
                 t_dm = (-b - np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
@@ -615,6 +617,7 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
                         print("adding weight", dp_wgt)
                     self.time.append(t+t_dm)
                     self.dm_time.append(t_dm)
+                    self.dp_time.append(t_dp)
                     self.energy.append(dm_momentum[0])
                     self.weight.append(dp_wgt)
                 t_dm = (-b + np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
@@ -623,11 +626,13 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
                         print("adding weight", dp_wgt)
                     self.time.append(t+t_dm)
                     self.dm_time.append(t_dm)
+                    self.dp_time.append(t_dp)
                     self.energy.append(dm_momentum[0])
                     self.weight.append(dp_wgt)
+            # DM particle 2
             v = (dp_momentum - dm_momentum)[1:] / (dp_momentum - dm_momentum)[0] * c_light
             a = np.sum(v ** 2)
-            b = 2 * np.sum(v)
+            b = 2 * v[2] * (c_light * dp_p / dp_e) * t_dp # 2 * np.sum(v) # 
             c = np.sum(pos ** 2) - self.det_dist ** 2
             if b ** 2 - 4 * a * c >= 0:
                 t_dm = (-b - np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
@@ -636,6 +641,7 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
                         print("adding weight", dp_wgt)
                     self.time.append(t+t_dm)
                     self.dm_time.append(t_dm)
+                    self.dp_time.append(t_dp)
                     self.energy.append((dp_momentum - dm_momentum)[0])
                     self.weight.append(dp_wgt)
                 t_dm = (-b + np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
@@ -644,6 +650,7 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
                         print("adding weight", dp_wgt)
                     self.time.append(t+t_dm)
                     self.dm_time.append(t_dm)
+                    self.dp_time.append(t_dp)
                     self.energy.append((dp_momentum - dm_momentum)[0])
                     self.weight.append(dp_wgt)
 
@@ -983,6 +990,7 @@ class DMFluxFromPiMinusAbsorption:
         self.sampling_size = sampling_size
         self.timing = None
         self.dm_timing = None
+        self.dp_timing = None
         self.energy = None
         self.ed_min = None
         self.ed_max = None
@@ -1020,8 +1028,10 @@ class DMFluxFromPiMinusAbsorption:
         vy = plaby / elab
         timing = []
         dm_timing = []
+        dp_timing = []
         energy = []
         for i in range(self.sampling_size):
+            dp_timing.append(t[i])
             a = vx[i] ** 2 + vy[i] ** 2
             b = 2 * vx[i] * t[i] * dp_v
             cc = dp_v ** 2 * t[i] ** 2 - self.det_dist ** 2
@@ -1036,6 +1046,7 @@ class DMFluxFromPiMinusAbsorption:
                     energy.append(elab[i])
         self.timing = np.array(timing) / c_light * meter_by_mev * 1e6
         self.dm_timing = np.array(dm_timing) / c_light * meter_by_mev * 1e6
+        self.dp_timing = np.array(dp_timing) / c_light * meter_by_mev * 1e6
         self.energy = np.array(energy)
         self.ed_min = min(energy)
         self.ed_max = max(energy)
