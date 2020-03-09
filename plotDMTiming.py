@@ -19,7 +19,7 @@ dm_flux_long_heavy = DMFluxIsoPhoton(photon_flux, dark_photon_mass=138, coupling
 #dm_flux_long = DMFluxIsoPhoton(photon_flux, dark_photon_mass=m_dp, coupling=g, dark_matter_mass=m_chi, life_time=1, sampling_size=1000)
 
 
-times_pim = dm_pim.timing
+times_pim = dm_pim.dm_timing
 
 #times_short = dm_flux_short.timing
 #weights_short = dm_flux_short.weight
@@ -30,7 +30,7 @@ times_pim = dm_pim.timing
 #times_long = dm_flux_long.timing
 #weights_long = dm_flux_long.weight
 
-times_long_heavy = dm_flux_long_heavy.timing
+times_long_heavy = dm_flux_long_heavy.dm_timing
 weights_long_heavy = dm_flux_long_heavy.weight
 
 plt.hist(times_pim, bins=100, histtype='step', density=True, label=r"$\tau = 1$ $\mu$s, pi-")

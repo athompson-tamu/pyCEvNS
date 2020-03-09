@@ -537,6 +537,7 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
         self.pot_sigma = pot_sigma * 1e-6
         self.pot_sample = pot_sample  # the number of POT corresponding to the supplied photon_distribution sample
         self.time = []
+        self.dm_time = []
         self.energy = []
         self.weight = []
         self.norm = 1
@@ -548,6 +549,7 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
             self._generate(photon_events, self.sampling_size)
 
         self.timing = np.array(self.time) * 1e6
+        self.dm_timing = np.array(self.dm_time) * 1e6
         normalization = self.epsilon ** 2 * (self.pot_rate / self.pot_sample) \
                         / (4 * np.pi * (self.det_dist ** 2) * 24 * 3600)\
                         * len(self.time) / len(self.photon_flux) * (meter_by_mev**2)
@@ -612,6 +614,15 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
                     if self.verbose:
                         print("adding weight", dp_wgt)
                     self.time.append(t+t_dm)
+                    self.dm_time.append(t_dm)
+                    self.energy.append(dm_momentum[0])
+                    self.weight.append(dp_wgt)
+                t_dm = (-b + np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
+                if t_dm >= 0:
+                    if self.verbose:
+                        print("adding weight", dp_wgt)
+                    self.time.append(t+t_dm)
+                    self.dm_time.append(t_dm)
                     self.energy.append(dm_momentum[0])
                     self.weight.append(dp_wgt)
             v = (dp_momentum - dm_momentum)[1:] / (dp_momentum - dm_momentum)[0] * c_light
@@ -619,11 +630,20 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
             b = 2 * np.sum(v)
             c = np.sum(pos ** 2) - self.det_dist ** 2
             if b ** 2 - 4 * a * c >= 0:
+                t_dm = (-b - np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
+                if t_dm >= 0:
+                    if self.verbose:
+                        print("adding weight", dp_wgt)
+                    self.time.append(t+t_dm)
+                    self.dm_time.append(t_dm)
+                    self.energy.append((dp_momentum - dm_momentum)[0])
+                    self.weight.append(dp_wgt)
                 t_dm = (-b + np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
                 if t_dm >= 0:
                     if self.verbose:
                         print("adding weight", dp_wgt)
                     self.time.append(t+t_dm)
+                    self.dm_time.append(t_dm)
                     self.energy.append((dp_momentum - dm_momentum)[0])
                     self.weight.append(dp_wgt)
 
@@ -962,6 +982,7 @@ class DMFluxFromPiMinusAbsorption:
         self.pion_rate = pion_rate
         self.sampling_size = sampling_size
         self.timing = None
+        self.dm_timing = None
         self.energy = None
         self.ed_min = None
         self.ed_max = None
@@ -998,6 +1019,7 @@ class DMFluxFromPiMinusAbsorption:
         vx = plabx / elab
         vy = plaby / elab
         timing = []
+        dm_timing = []
         energy = []
         for i in range(self.sampling_size):
             a = vx[i] ** 2 + vy[i] ** 2
@@ -1005,14 +1027,15 @@ class DMFluxFromPiMinusAbsorption:
             cc = dp_v ** 2 * t[i] ** 2 - self.det_dist ** 2
             if b ** 2 - 4 * a * cc >= 0:
                 if (-b - np.sqrt(b ** 2 - 4 * a * cc)) / (2 * a) > 0:
-                    #print((-b - np.sqrt(b ** 2 - 4 * a * cc)) / (2 * a), "< t_dm (pi-)")
                     timing.append((-b - np.sqrt(b ** 2 - 4 * a * cc)) / (2 * a) + t[i] + tf[i])
+                    dm_timing.append((-b - np.sqrt(b ** 2 - 4 * a * cc)) / (2 * a))
                     energy.append(elab[i])
                 if (-b + np.sqrt(b ** 2 - 4 * a * cc)) / (2 * a) > 0:
-                    #print(((-b + np.sqrt(b ** 2 - 4 * a * cc)) / (2 * a))/ c_light * meter_by_mev, "< t_dm (pi-)")
                     timing.append((-b + np.sqrt(b ** 2 - 4 * a * cc)) / (2 * a) + t[i] + tf[i])
+                    dm_timing.append((-b + np.sqrt(b ** 2 - 4 * a * cc)) / (2 * a))
                     energy.append(elab[i])
         self.timing = np.array(timing) / c_light * meter_by_mev * 1e6
+        self.dm_timing = np.array(dm_timing) / c_light * meter_by_mev * 1e6
         self.energy = np.array(energy)
         self.ed_min = min(energy)
         self.ed_max = max(energy)
