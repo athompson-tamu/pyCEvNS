@@ -751,12 +751,12 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
         self.dm_timing = np.array(self.dm_time) * 1e6
         self.dp_timing = np.array(self.dp_time) * 1e6
         normalization = self.epsilon ** 2 * (self.pot_rate / self.pot_sample) \
-                        / (4 * np.pi * (self.det_dist ** 2) * 24 * 3600)\
-                        * len(self.time) / len(self.photon_flux) * (meter_by_mev**2)
+                        / (4 * np.pi * (self.det_dist ** 2) * 24 * 3600) * (meter_by_mev**2)
         self.norm = normalization
+        self.weight = [x * self.norm for x in self.weight]
 
         hist, bin_edges = np.histogram(self.energy, bins=nbins, weights=self.weight, density=True)
-        super().__init__((bin_edges[:-1] + bin_edges[1:]) / 2, hist, norm=np.sum(self.weight)*normalization)
+        super().__init__((bin_edges[:-1] + bin_edges[1:]) / 2, hist, norm=np.sum(self.weight))
 
     def getLifeTime(self, g, m):
         return ((16 * np.pi ** 2) / ((g ** 2) * m)) * mev_per_hz
@@ -939,15 +939,12 @@ class DMFluxFromPiMinusAbsorption:
         """
         dp_m = self.dp_mass
         dp_e = ((massofpi + massofp) ** 2 - massofn ** 2 + dp_m ** 2) / (2 * (massofpi + massofp))
-        print(dp_e, "< pi- absorption")
         dp_p = np.sqrt(dp_e ** 2 - dp_m ** 2)
         dp_v = dp_p / dp_e
         gamma = dp_e / dp_m
         tau = self.dp_life * gamma
         tf = np.random.normal(self.mu, self.sigma, self.sampling_size)  # POT
-        print(tf / c_light * meter_by_mev, "< t (pi-)")
         t = np.random.exponential(tau, self.sampling_size)  # life time of each dark photon
-        print(t / c_light * meter_by_mev, "< t_dp (pi-)")
         cs = np.random.uniform(-1, 1, self.sampling_size)  # direction of each dark photon
         # in rest frame
         estar = dp_m / 2
@@ -1057,7 +1054,7 @@ class DMFluxFromPi0Decay(FluxBaseContinuous):
         self.time = []
         self.energy = []
         self.dm_mass = dark_matter_mass
-        for pi0_events in pi0_distribution:
+        for pi0_events in pi0_distribution:  # must be in the form [azimuth, cos(zenith), kinetic energy]
             self._simulate_dm_events(pi0_events)
         self.timing = np.array(self.time)*1e6
         hist, bin_edges = np.histogram(self.energy, bins=nbins, density=True)
@@ -1094,9 +1091,9 @@ class DMFluxFromPi0Decay(FluxBaseContinuous):
         csd = np.random.uniform(-1, 1)
         phid = np.random.uniform(0, 2*np.pi)
         dm_momentum = np.array([dm_e, dm_p*np.sqrt(1-csd**2)*np.cos(phid), dm_p*np.sqrt(1-csd**2)*np.sin(phid), dm_p*csd])
-        dm_momentum = lorentz_boost(dm_momentum, np.array([-dp_momentum[1]/dp_momentum[0], -dp_momentum[2]/dp_momentum[0], -dp_momentum[3]/dp_momentum[0]]))
-        # print(lorentz_boost(dm_momentum, np.array([dp_momentum[1]/dp_momentum[0], dp_momentum[2]/dp_momentum[0], dp_momentum[3]/dp_momentum[0]])) +
-        #       lorentz_boost(dp_momentum-dm_momentum, np.array([dp_momentum[1]/dp_momentum[0], dp_momentum[2]/dp_momentum[0], dp_momentum[3]/dp_momentum[0]])))
+        dm_momentum = lorentz_boost(dm_momentum, np.array([-dp_momentum[1]/dp_momentum[0],
+                                                           -dp_momentum[2]/dp_momentum[0],
+                                                           -dp_momentum[3]/dp_momentum[0]]))
         # dark matter arrives at detector, assuming azimuthal symmetric
         v = dm_momentum[1:]/dm_momentum[0]*c_light
         a = np.sum(v**2)
