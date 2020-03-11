@@ -726,7 +726,7 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
         self.dp_m = dark_photon_mass
         self.dm_m = dark_matter_mass
         self.epsilon = coupling
-        self.life_time = self.getLifeTime(coupling, dark_photon_mass)
+        self.life_time = self.get_lifetime(coupling, dark_photon_mass)
         if life_time is not None:
             self.life_time = life_time * 1e-6
         self.det_dist = detector_distance  # meters
@@ -758,7 +758,7 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
         hist, bin_edges = np.histogram(self.energy, bins=nbins, weights=self.weight, density=True)
         super().__init__((bin_edges[:-1] + bin_edges[1:]) / 2, hist, norm=np.sum(self.weight))
 
-    def getLifeTime(self, g, m):
+    def get_lifetime(self, g, m):
         return ((16 * np.pi ** 2) / ((g ** 2) * m)) * mev_per_hz
 
 
@@ -895,7 +895,7 @@ class DMFluxFromPiMinusAbsorption:
     r"""
     Dark matter flux from pi^- + p -> A^\prime + n -> \chi + \chi + n
     """
-    def __init__(self, dark_photon_mass, life_time, coupling_quark, dark_matter_mass,
+    def __init__(self, dark_photon_mass, coupling_quark, dark_matter_mass, life_time=None,
                  detector_distance=19.3, pot_rate=5e20, pot_mu=0.7, pot_sigma=0.15, pion_rate=18324/500000, sampling_size=100000):
         """
         initialize and generate flux
@@ -916,7 +916,9 @@ class DMFluxFromPiMinusAbsorption:
         self.dm_m = dark_matter_mass
         self.epsi_quark = coupling_quark
         self.det_dist = detector_distance / meter_by_mev
-        self.dp_life = life_time * 1e-6 * c_light / meter_by_mev
+        self.dp_life = self.get_lifetime(coupling_quark, dark_photon_mass) * c_light / meter_by_mev
+        if life_time is not None:
+            self.dp_life = life_time * 1e-6 * c_light / meter_by_mev
         self.mu = pot_mu * 1e-6 * c_light / meter_by_mev
         self.sigma = pot_sigma * 1e-6 * c_light / meter_by_mev
         self.pot_rate = pot_rate
@@ -932,6 +934,9 @@ class DMFluxFromPiMinusAbsorption:
         self._generate()
         self.ev_min = self.ed_min
         self.ev_max = self.ed_max
+
+    def get_lifetime(self, g, m):
+        return ((16 * np.pi ** 2) / ((g ** 2) * m)) * mev_per_hz
 
     def _generate(self):
         """
@@ -1022,6 +1027,33 @@ class DMFluxFromPiMinusAbsorption:
         self.sampling_size = sampling_size if sampling_size is not None else self.sampling_size
         self._generate()
 
+    def fint(self, er, m):
+        if np.isscalar(m):
+            m = np.array([m])
+        emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_m**2+4*m*self.dm_m**2)/m) + er)
+        res = np.zeros_like(emin)
+        for i in range(emin.shape[0]):
+            res[i] = self.integrate(emin[i], self.ev_max, weight_function=self.f0)
+        return res
+
+    def fint1(self, er, m):
+        if np.isscalar(m):
+            m = np.array([m])
+        emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_m**2+4*m*self.dm_m**2)/m) + er)
+        res = np.zeros_like(emin)
+        for i in range(emin.shape[0]):
+            res[i] = self.integrate(emin[i], self.ev_max, weight_function=self.f1)
+        return res
+
+    def fint2(self, er, m):
+        if np.isscalar(m):
+            m = np.array([m])
+        emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_m**2+4*m*self.dm_m**2)/m) + er)
+        res = np.zeros_like(emin)
+        for i in range(emin.shape[0]):
+            res[i] = self.integrate(emin[i], self.ev_max, weight_function=self.f2)
+        return res
+
     def f0(self, ev):
         return 1/(ev**2 - self.dm_m**2)
 
@@ -1054,6 +1086,7 @@ class DMFluxFromPi0Decay(FluxBaseContinuous):
         self.time = []
         self.energy = []
         self.dm_mass = dark_matter_mass
+        print(pi0_distribution.shape)
         for pi0_events in pi0_distribution:  # must be in the form [azimuth, cos(zenith), kinetic energy]
             self._simulate_dm_events(pi0_events)
         self.timing = np.array(self.time)*1e6
@@ -1097,15 +1130,15 @@ class DMFluxFromPi0Decay(FluxBaseContinuous):
         # dark matter arrives at detector, assuming azimuthal symmetric
         v = dm_momentum[1:]/dm_momentum[0]*c_light
         a = np.sum(v**2)
-        b = 2*np.sum(v)
+        b = 2 * v[2] * (c_light * dp_p / dp_e) * t_dp #2*np.sum(v)
         c = np.sum(pos**2) - self.det_dist**2
         if b**2 - 4*a*c >= 0:
             t_dm = (-b+np.sqrt(b**2-4*a*c))/(2*a)
-            if t_dm >= 0 and self.det_direc-self.det_width/2 <= (pos[2]+v[2]*t_dm)/np.sqrt(np.sum((v*t_dm + pos)**2)) <= self.det_direc+self.det_width/2:
+            if t_dm >= 0: #and self.det_direc-self.det_width/2 <= (pos[2]+v[2]*t_dm)/np.sqrt(np.sum((v*t_dm + pos)**2)) <= self.det_direc+self.det_width/2:
                 self.time.append(t+t_dm)
                 self.energy.append(dm_momentum[0])
             t_dm = (-b-np.sqrt(b**2-4*a*c))/(2*a)
-            if t_dm >= 0 and self.det_direc-self.det_width/2 <= (pos[2]+v[2]*t_dm)/np.sqrt(np.sum((v*t_dm + pos)**2)) <= self.det_direc+self.det_width/2:
+            if t_dm >= 0: #and self.det_direc-self.det_width/2 <= (pos[2]+v[2]*t_dm)/np.sqrt(np.sum((v*t_dm + pos)**2)) <= self.det_direc+self.det_width/2:
                 self.time.append(t+t_dm)
                 self.energy.append(dm_momentum[0])
         v = (dp_momentum-dm_momentum)[1:]/(dp_momentum-dm_momentum)[0]*c_light
@@ -1114,11 +1147,11 @@ class DMFluxFromPi0Decay(FluxBaseContinuous):
         c = np.sum(pos**2) - self.det_dist**2
         if b**2 - 4*a*c >= 0:
             t_dm = (-b+np.sqrt(b**2-4*a*c))/(2*a)
-            if t_dm >= 0 and self.det_direc-self.det_width/2 <= (pos[2]+v[2]*t_dm)/np.sqrt(np.sum((v*t_dm + pos)**2)) <= self.det_direc+self.det_width/2:
+            if t_dm >= 0: #and self.det_direc-self.det_width/2 <= (pos[2]+v[2]*t_dm)/np.sqrt(np.sum((v*t_dm + pos)**2)) <= self.det_direc+self.det_width/2:
                 self.time.append(t+t_dm)
                 self.energy.append((dp_momentum-dm_momentum)[0])
             t_dm = (-b-np.sqrt(b**2-4*a*c))/(2*a)
-            if t_dm >= 0 and self.det_direc-self.det_width/2 <= (pos[2]+v[2]*t_dm)/np.sqrt(np.sum((v*t_dm + pos)**2)) <= self.det_direc+self.det_width/2:
+            if t_dm >= 0: #and self.det_direc-self.det_width/2 <= (pos[2]+v[2]*t_dm)/np.sqrt(np.sum((v*t_dm + pos)**2)) <= self.det_direc+self.det_width/2:
                 self.time.append(t+t_dm)
                 self.energy.append((dp_momentum-dm_momentum)[0])
 
@@ -1126,6 +1159,8 @@ class DMFluxFromPi0Decay(FluxBaseContinuous):
         return pd.DataFrame({'time': self.time, 'energy': self.energy})
 
     def fint(self, er, m):
+        if np.isscalar(m):
+            m = np.array([m])
         emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_m**2+4*m*self.dm_m**2)/m) + er)
         res = np.zeros_like(emin)
         for i in range(emin.shape[0]):
@@ -1133,6 +1168,8 @@ class DMFluxFromPi0Decay(FluxBaseContinuous):
         return res
 
     def fint1(self, er, m):
+        if np.isscalar(m):
+            m = np.array([m])
         emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_m**2+4*m*self.dm_m**2)/m) + er)
         res = np.zeros_like(emin)
         for i in range(emin.shape[0]):
@@ -1140,6 +1177,8 @@ class DMFluxFromPi0Decay(FluxBaseContinuous):
         return res
 
     def fint2(self, er, m):
+        if np.isscalar(m):
+            m = np.array([m])
         emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_m**2+4*m*self.dm_m**2)/m) + er)
         res = np.zeros_like(emin)
         for i in range(emin.shape[0]):

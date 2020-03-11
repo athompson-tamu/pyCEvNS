@@ -14,8 +14,12 @@ delayed_pdf = np.genfromtxt('data/jsns/mu_neutrino_timing.txt', delimiter=',')
 
 # CONSTANTS
 # TODO: update pe_per_mev for JSNS2
-pe_per_mev = 0.0878 * 13.348 * 1000
-exposure = 3 * 365 * 1000  #4466
+pe_per_mev = 10000
+exposure = 3 * 365 * 17000  #4466
+pim_rate_coherent = 0.0457
+pim_rate_jsns = 0.4962
+pim_rate_ccm = 0.0259
+pim_rate = pim_rate_jsns
 
 
 # TODO: update prompt and delayed pdfs.
@@ -45,10 +49,7 @@ def efficiency(pe):
 
 
 def get_energy_bins(e_a, e_b):
-  return np.arange(e_a, e_b, step=2000 / pe_per_mev)
-
-
-
+  return np.arange(e_a, e_b, step=10000 / pe_per_mev)
 
 
 
@@ -82,21 +83,26 @@ energies = n_meas[:, 0] / pe_per_mev
 
 # Plot JSNS^2 Dark Matter Signal
 def GetDMEvents(m_chi, m_dp, m_med, g):
-    photon_flux = np.genfromtxt("data/jsns_3gev_photon_totals_1e5_POT.txt")  # binned photon spectrum from
-    dm_gen = DmEventsGen(dark_photon_mass=m_dp, dark_matter_mass=m_chi, life_time=1, expo=exposure, detector_type='ar')
-    dm_flux = DMFluxIsoPhoton(photon_flux, dark_photon_mass=m_dp, coupling=g, dark_matter_mass=m_chi,
+    brem_flux = np.genfromtxt("data/jsns/brem.txt")  # binned photon spectrum from
+    dm_gen = DmEventsGen(dark_photon_mass=m_dp, dark_matter_mass=m_chi, life_time=1, expo=exposure, detector_type='jsns_scintillator')
+    brem_flux = DMFluxIsoPhoton(brem_flux, dark_photon_mass=m_dp, coupling=g, dark_matter_mass=m_chi,
                               detector_distance=24, pot_mu=0.145, pot_sigma=0.1, pot_sample=1e5,
-                              sampling_size=2000, verbose=False)
-    dm_gen.fx = dm_flux
-    return dm_gen.events(m_med, g, n_meas, channel="electron")
+                              sampling_size=1000, verbose=False)
+    pim_flux = DMFluxFromPiMinusAbsorption(dark_photon_mass=m_dp, coupling_quark=g, dark_matter_mass=m_chi, pion_rate=pim_rate,
+                                           pot_mu=0.145, pot_sigma=0.1)
+    dm_gen.fx = brem_flux
+    brem_events = dm_gen.events(m_med, g, n_meas, channel="electron")
+
+    dm_gen.fx = pim_flux
+    pim_events = dm_gen.events(m_med, g, n_meas, channel="electron")
+
+    return brem_events + pim_events
 
 
-dm_events = GetDMEvents(m_chi=0.1, m_dp=75, m_med=25, g=1e-4)
-dm_events2 = GetDMEvents(m_chi=5, m_dp=75, m_med=25, g=1e-4)
-dm_events3 = GetDMEvents(m_chi=10, m_dp=75, m_med=25, g=1e-4)
-dm_events4 = GetDMEvents(m_chi=20, m_dp=75, m_med=25, g=1e-4)
-dm_events5 = GetDMEvents(m_chi=50, m_dp=150, m_med=25, g=1e-4)
-dm_events6 = GetDMEvents(m_chi=80, m_dp=200, m_med=25, g=1e-4)
+dm_events1 = GetDMEvents(m_chi=1, m_dp=75, m_med=25, g=5e-4)
+dm_events2 = GetDMEvents(m_chi=20, m_dp=120, m_med=25, g=5e-4)
+
+
 
 
 
@@ -104,7 +110,7 @@ dm_events6 = GetDMEvents(m_chi=80, m_dp=200, m_med=25, g=1e-4)
 flux_factory = NeutrinoFluxFactory()
 prompt_flux = flux_factory.get('coherent_prompt')
 delayed_flux = flux_factory.get('coherent_delayed')
-det = Detector("ar")
+det = Detector("jsns_scintillator")
 nsi = NSIparameters(0)
 gen = NeutrinoElectronElasticVector(nsi)
 flat_index = 0
@@ -152,26 +158,21 @@ plt.clf()
 
 
 # Plot Dark Matter against Neutrino Spectrum
-plt.hist(n_meas[:,0]/pe_per_mev, weights=n_nu, bins=energy_edges,
-         histtype='stepfilled', color='dimgray', label="Prompt + Delayed Neutrinos")
-plt.hist(energies,weights=dm_events,bins=energy_edges,
-         histtype='step',label=r"DM ($m_{\chi} = 0.1$ MeV)")
+density = False
+plt.hist([n_meas[:,0]/pe_per_mev,n_meas[:,0]/pe_per_mev], weights=[n_prompt, n_delayed], bins=energy_edges,
+         stacked=True, histtype='stepfilled', density=density, color=['black','dimgray'], label=["Prompt", "Delayed"])
+plt.hist(energies,weights=dm_events1,bins=energy_edges,
+         histtype='step', density=density, label=r"DM ($m_{\chi} = 1$ MeV)")
 plt.hist(energies,weights=dm_events2,bins=energy_edges,
-         histtype='step',label=r"DM ($m_{\chi} = 5$ MeV)")
-plt.hist(energies,weights=dm_events3,bins=energy_edges,
-         histtype='step',label=r"DM ($m_{\chi} = 10$ MeV)")
-plt.hist(energies,weights=dm_events4,bins=energy_edges,
-         histtype='step',label=r"DM ($m_{\chi} = 20$ MeV)")
-plt.hist(energies,weights=dm_events5,bins=energy_edges,
-         histtype='step',label=r"DM ($m_{\chi} = 50$ MeV)")
-plt.hist(energies,weights=dm_events6,bins=energy_edges,
-         histtype='step',label=r"DM ($m_{\chi} = 80$ MeV)")
+         histtype='step', density=density, label=r"DM ($m_{\chi} = 20$ MeV)")
 plt.xlabel(r"$E_r$ [MeV]")
 #plt.yscale("log")
 plt.ylabel(r"a.u.")
 plt.xlim((0,100))
 plt.legend()
 plt.savefig("plots/jsns2/neutrino_dm_spectra.png")
+print(np.sum(n_nu), np.sum(dm_events1), np.sum(dm_events2))
+plt.show()
 
 
 

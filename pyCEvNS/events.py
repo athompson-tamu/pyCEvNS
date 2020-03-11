@@ -262,8 +262,10 @@ def rates_dm_electron(er, det: Detector, fx: DMFlux, mediator_mass=None,
         epsilon = fx.epsi_quark
 
     def rates(err):
-        prefactor = e_charge**4 * det.z * epsilon**2 / (4*np.pi * (2*me*err+mediator_mass**2)**2)
-        res = prefactor * np.dot(det.frac, (2*me*fx.fint2(err, me)
+        if err < det.er_min:
+            return 0
+        prefactor = e_charge**4 * epsilon**2 / (4*np.pi * (2*me*err+mediator_mass**2)**2)
+        res = prefactor * np.dot(det.frac, det.z * (2*me*fx.fint2(err, me)
                                             - 2*me*err*fx.fint1(err, me)
                                             - err*(me**2-fx.dm_m**2)*fx.fint(err, me)
                                             + err**2*me*fx.fint(err, me)))
@@ -298,6 +300,8 @@ def rates_dm(er, det: Detector, fx: DMFlux, mediator_mass=None, epsilon=None, ef
         epsilon = fx.epsi_quark
 
     def rates(err):
+        if err < det.er_min:
+            return 0
         res = np.dot(det.frac, e_charge**4 * epsilon**2 * det.z**2 *
                       (2*det.m*fx.fint2(err, det.m) -
                        (err)*2*det.m*fx.fint1(err, det.m) -(det.m**2*err-fx.dm_m**2*err)*fx.fint(err, det.m) +
