@@ -388,7 +388,7 @@ class NeutrinoFluxFactory:
     def __init__(self):
         self.flux_list = ['solar', 'solar_b8', 'solar_f17', 'solar_hep', 'solar_n13', 'solar_o15', 'solar_pp',
                           'solar_pep', 'solar_be7', 'coherent', 'coherent_prompt', 'coherent_delayed',
-                          'far_beam_nu', 'far_beam_nubar', 'atmospheric']
+                          'far_beam_nu', 'far_beam_nubar', 'atmospheric','jsns_prompt', 'jsns_delayed',]
 
     def print_available(self):
         print(self.flux_list)
@@ -424,6 +424,23 @@ class NeutrinoFluxFactory:
             return NeutrinoFlux(continuous_fluxes={'ev': ev, 'e': de(ev), 'mubar': dmubar(ev)}, norm=1.13 * (10 ** 7))
         if flux_name == 'coherent_prompt':
             return NeutrinoFlux(delta_fluxes={'mu': [(29, 1)]}, norm=1.13 * (10 ** 7))
+        if flux_name == 'jsns':
+            def de(evv):
+                return (3 * ((evv / (2 / 3 * 52)) ** 2) - 2 * ((evv / (2 / 3 * 52)) ** 3)) / 29.25
+            def dmubar(evv):
+                return (3 * ((evv / 52) ** 2) - 2 * ((evv / 52) ** 3)) / 26
+            ev = np.linspace(0.001, 52, 100)
+            return NeutrinoFlux(continuous_fluxes={'ev': ev, 'e': de(ev), 'mubar': dmubar(ev)},
+                                delta_fluxes={'mu': [(29, 1),(236, 0.013)]}, norm=4.9 * (10 ** 7)) ## default unit is /(cm^2*s)
+        if flux_name == 'jsns_delayed':
+            def de(evv):
+                return (3 * ((evv / (2 / 3 * 52)) ** 2) - 2 * ((evv / (2 / 3 * 52)) ** 3)) / 29.25
+            def dmubar(evv):
+                return (3 * ((evv / 52) ** 2) - 2 * ((evv / 52) ** 3)) / 26
+            ev = np.linspace(0.001, 52, kwargs['npoints'] if 'npoints' in kwargs else 100)
+            return NeutrinoFlux(continuous_fluxes={'ev': ev, 'e': de(ev), 'mubar': dmubar(ev)}, norm=3 * (10 ** 7))
+        if flux_name == 'jsns_prompt':
+            return NeutrinoFlux(delta_fluxes={'mu': [(29, 1),(236, 0.013)]}, norm=1.85 * (10 ** 7))
         if flux_name == 'far_beam_nu':
             far_beam_txt = 'data/dune_beam_fd_nu_flux_120GeVoptimized.txt'
             f_beam = np.genfromtxt(pkg_resources.resource_filename(__name__, far_beam_txt), delimiter=',')
@@ -720,7 +737,7 @@ class DMFlux:
 
 class DMFluxIsoPhoton(FluxBaseContinuous):
     def __init__(self, photon_distribution, dark_photon_mass, coupling, dark_matter_mass, life_time=None,
-                 detector_distance=19.3, pot_rate=5e20, pot_sample=100000,
+                 detector_distance=19.3, pot_rate=5e20, pot_sample=100000, det_area=0.0374,
                  pot_mu=0.7, pot_sigma=0.15, sampling_size=100, nbins=10, verbose=False):
         self.photon_flux = photon_distribution
         self.dp_m = dark_photon_mass
@@ -730,6 +747,7 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
         if life_time is not None:
             self.life_time = life_time * 1e-6
         self.det_dist = detector_distance  # meters
+        self.area = det_area # meters^2
         self.pot_rate = pot_rate  # the number of POT/day in the experiment
         self.pot_mu = pot_mu * 1e-6
         self.pot_sigma = pot_sigma * 1e-6
@@ -750,7 +768,7 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
         self.timing = np.array(self.time) * 1e6
         self.dm_timing = np.array(self.dm_time) * 1e6
         self.dp_timing = np.array(self.dp_time) * 1e6
-        normalization = self.epsilon ** 2 * (self.pot_rate / self.pot_sample) \
+        normalization = self.epsilon ** 2 * (self.pot_rate / self.pot_sample) * self.area \
                         / (4 * np.pi * (self.det_dist ** 2) * 24 * 3600) * (meter_by_mev**2)
         self.norm = normalization
         self.weight = [x * self.norm for x in self.weight]
@@ -896,7 +914,8 @@ class DMFluxFromPiMinusAbsorption:
     Dark matter flux from pi^- + p -> A^\prime + n -> \chi + \chi + n
     """
     def __init__(self, dark_photon_mass, coupling_quark, dark_matter_mass, life_time=None,
-                 detector_distance=19.3, pot_rate=5e20, pot_mu=0.7, pot_sigma=0.15, pion_rate=18324/500000, sampling_size=100000):
+                 detector_distance=19.3, pot_rate=5e20, pot_mu=0.7, pot_sigma=0.15, pion_rate=18324/500000,
+                 sampling_size=100000, det_area=0.0374):
         """
         initialize and generate flux
         default values are COHERENT experiment values
@@ -923,11 +942,12 @@ class DMFluxFromPiMinusAbsorption:
         self.sigma = pot_sigma * 1e-6 * c_light / meter_by_mev
         self.pot_rate = pot_rate
         self.pion_rate = pion_rate
+        self.area = det_area
         self.sampling_size = sampling_size
-        self.timing = None
-        self.dm_timing = None
-        self.dp_timing = None
-        self.energy = None
+        self.timing = []
+        self.dm_timing = []
+        self.dp_timing = []
+        self.energy = []
         self.ed_min = None
         self.ed_max = None
         self.norm = None
@@ -942,6 +962,9 @@ class DMFluxFromPiMinusAbsorption:
         """
         generate dark matter flux
         """
+        # First check that the dp mass is less than the pi- mass.
+        if self.dp_mass > massofpi:
+            return
         dp_m = self.dp_mass
         dp_e = ((massofpi + massofp) ** 2 - massofn ** 2 + dp_m ** 2) / (2 * (massofpi + massofp))
         dp_p = np.sqrt(dp_e ** 2 - dp_m ** 2)
@@ -987,7 +1010,7 @@ class DMFluxFromPiMinusAbsorption:
         self.ed_min = min(energy)
         self.ed_max = max(energy)
         self.norm = self.epsi_quark ** 2 * self.pot_rate * self.pion_rate / (4 * np.pi * (self.det_dist ** 2) * 24 * 3600) * \
-                    self.timing.shape[0] * 2 / self.sampling_size
+                    self.area * self.timing.shape[0] * 2 / self.sampling_size
 
     def __call__(self, ev):
         """
@@ -1069,11 +1092,13 @@ class DMFluxFromPi0Decay(FluxBaseContinuous):
     """
     z direction is the direction of the beam
     """
-    def __init__(self, pi0_distribution, dark_photon_mass, life_time, coupling_quark, dark_matter_mass,
+    def __init__(self, pi0_distribution, dark_photon_mass, coupling_quark, dark_matter_mass, life_time=None,
                  detector_distance=19.3, detector_direction=0, detector_width=0.1, pot_rate=5e20, pot_mu=0.7, pot_sigma=0.15,
-                 pion_rate=52935/500000, nbins=50):
+                 det_area=0.0374, pion_rate=52935/500000, nbins=50):
         self.dp_m = dark_photon_mass
-        self.life_time = life_time * 1e-6
+        self.life_time = self.get_lifetime(coupling_quark, dark_photon_mass)
+        if life_time is not None:
+            self.life_time = life_time * 1e-6
         self.epsilon = coupling_quark
         self.dm_m = dark_matter_mass
         self.det_dist = detector_distance
@@ -1086,15 +1111,17 @@ class DMFluxFromPi0Decay(FluxBaseContinuous):
         self.time = []
         self.energy = []
         self.dm_mass = dark_matter_mass
-        print(pi0_distribution.shape)
         for pi0_events in pi0_distribution:  # must be in the form [azimuth, cos(zenith), kinetic energy]
             self._simulate_dm_events(pi0_events)
         self.timing = np.array(self.time)*1e6
         hist, bin_edges = np.histogram(self.energy, bins=nbins, density=True)
         super().__init__((bin_edges[:-1]+bin_edges[1:])/2, hist,
-                         norm=self.epsilon**2*pot_rate*pion_rate*len(self.time)/len(pi0_distribution)/
+                         norm=self.epsilon**2*pot_rate*pion_rate*det_area*len(self.time)/len(pi0_distribution)/
                               (2*np.pi*(min(1.0, detector_direction+detector_width/2)-max(-1.0, detector_direction-detector_width/2))*detector_distance**2*24*3600)
                               *(meter_by_mev**2))
+    
+    def get_lifetime(self, g, m):
+        return ((16 * np.pi ** 2) / ((g ** 2) * m)) * mev_per_hz
 
     def _simulate_dm_events(self, pi0_events):
         pos = np.zeros(3)
