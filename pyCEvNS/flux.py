@@ -1124,6 +1124,8 @@ class DMFluxFromPi0Decay(FluxBaseContinuous):
         return ((16 * np.pi ** 2) / ((g ** 2) * m)) * mev_per_hz
 
     def _simulate_dm_events(self, pi0_events):
+        if self.dp_m > massofpi0:
+            return
         pos = np.zeros(3)
         t = 0
         t += np.random.normal(self.pot_mu, self.pot_sigma)
