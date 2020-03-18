@@ -15,7 +15,6 @@ rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
 rc('text', usetex=True)
 
 # CONSTANTS
-# TODO: update pe_per_mev for JSNS2
 pe_per_mev = 10000
 exposure = 3 * 208 * 50000
 pim_rate_coherent = 0.0457
@@ -69,15 +68,15 @@ def efficiency(pe):
 
 
 def get_energy_bins(e_a, e_b):
-  return np.arange(e_a, e_b, step=10000 / pe_per_mev)
+  return np.arange(e_a, e_b, step=20000 / pe_per_mev)
 
 
 # Set up energy and timing bins
-hi_energy_cut = 100  # mev
+hi_energy_cut = 3000  # mev
 lo_energy_cut = 0.0  # mev
 hi_timing_cut = 0.5
-lo_timing_cut = 0.25
-energy_edges = get_energy_bins(lo_energy_cut, hi_energy_cut)
+lo_timing_cut = 0.0
+energy_edges = np.linspace(lo_energy_cut, hi_energy_cut,51) #get_energy_bins(lo_energy_cut, hi_energy_cut)
 energy_bins = (energy_edges[:-1] + energy_edges[1:]) / 2
 timing_edges = np.linspace(lo_timing_cut, hi_timing_cut, 10)
 timing_bins = (timing_edges[:-1] + timing_edges[1:]) / 2
@@ -89,11 +88,11 @@ n_bg = 405 * exposure / exposure / (12 * 12) * np.ones((energy_bins.shape[0], le
 flat_index = 0
 for i in range(0, energy_bins.shape[0]):
   for j in range(0, timing_bins.shape[0]):
-    n_meas[flat_index, 0] = energy_bins[i] * pe_per_mev
+    n_meas[flat_index, 0] = energy_bins[i]
     n_meas[flat_index, 1] = timing_bins[j]
     flat_index += 1
 
-flat_energies = n_meas[:,0] / pe_per_mev
+flat_energies = n_meas[:,0]
 flat_times = n_meas[:,1]
 
 # Get neutrino spectrum
@@ -201,12 +200,12 @@ plt.hist(energy_bins,weights=dm_events3,bins=energy_edges,
 
 """
 plt.xlabel(r"$E_r$ [MeV]")
-#plt.yscale("log")
+plt.yscale("log")
 plt.ylabel(r"Events")
-plt.title(r"$\epsilon=10^{-4}$, $M_X = 5$ MeV, $m_{\chi} = 30$ MeV, timing cut $0.25 < t < 0.5$ $\mu$s", loc='right')
-plt.xlim((0,50))
+plt.title(r"$\epsilon=10^{-4}$, $M_X = 25$ MeV, $m_{\chi} = 5$ MeV, timing cut $t < 0.5$ $\mu$s", loc='right')
+plt.xlim((lo_energy_cut,hi_energy_cut))
 plt.legend()
-plt.savefig("plots/jsns2/neutrino_dm_spectra_25e-2_5e-1mus.png")
+plt.savefig("plots/jsns2/neutrino_dm_spectra_5e-1mus.png")
 plt.show()
 
 

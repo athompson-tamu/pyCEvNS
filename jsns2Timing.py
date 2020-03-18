@@ -26,7 +26,7 @@ def delayed_prob(ta, tb):
 
 
 
-timing_edges = np.linspace(0,2,200)
+timing_edges = np.linspace(0,2,100)
 timing_bins = (timing_edges[:-1] + timing_edges[1:]) / 2
 
 times = np.linspace(0,2,1000)
@@ -41,7 +41,6 @@ for i in range(0, binned_prompt.shape[0]):
 plt.plot(timing_bins, binned_delayed, ls='steps-mid', color='b', label='delayed')
 plt.plot(timing_bins, binned_prompt, ls='steps-mid', color='r', label='prompt')
 
-plt.plot(times, delayed_time(times), color='k')
 plt.legend()
 
 print("sum bins", np.sum(binned_delayed))
