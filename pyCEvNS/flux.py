@@ -392,6 +392,9 @@ class NeutrinoFluxFactory:
 
     def print_available(self):
         print(self.flux_list)
+    
+    def interp_flux(self, nrg, data):
+        return np.interp(nrg, data[:,0], data[:,1])
 
     def get(self, flux_name, **kwargs):
         if flux_name not in self.flux_list:
@@ -425,21 +428,54 @@ class NeutrinoFluxFactory:
         if flux_name == 'coherent_prompt':
             return NeutrinoFlux(delta_fluxes={'mu': [(29, 1)]}, norm=1.13 * (10 ** 7))
         if flux_name == 'jsns':
-            def de(evv):
-                return (3 * ((evv / (2 / 3 * 52)) ** 2) - 2 * ((evv / (2 / 3 * 52)) ** 3)) / 29.25
-            def dmubar(evv):
-                return (3 * ((evv / 52) ** 2) - 2 * ((evv / 52) ** 3)) / 26
-            ev = np.linspace(0.001, 52, 100)
-            return NeutrinoFlux(continuous_fluxes={'ev': ev, 'e': de(ev), 'mubar': dmubar(ev)},
+            nu_e = np.genfromtxt(pkg_resources.resource_filename(__name__, "data/jsns2/jsns_nu_e.txt"), delimiter=',')
+            nu_mu = np.genfromtxt(pkg_resources.resource_filename(__name__, "data/jsns2/jsns_nu_mu_nodelta.txt"), delimiter=',')
+            nubar_mu = np.genfromtxt(pkg_resources.resource_filename(__name__, "data/jsns2/jsns_nubar_mu.txt"), delimiter=',')
+
+            norm_nu_e = quad(self.interp_flux, 0, 300, args=(nu_e,))[0]
+            norm_nu_mu = quad(self.interp_flux, 0, 300, args=(nu_mu,))[0]
+            norm_nubar_mu = quad(self.interp_flux, 0, 300, args=(nubar_mu,))[0]
+
+            def numuPDF(energy):
+                return self.interp_flux(energy, nu_mu) / norm_nu_mu
+
+            def nuePDF(energy):
+                return self.interp_flux(energy, nu_e) / norm_nu_e
+
+            def nubarmuPDF(energy):
+                return self.interp_flux(energy, nubar_mu) / norm_nubar_mu
+            
+            edges = np.arange(0, 302, 2) # energy bin edges
+            ev = (edges[:-1] + edges[1:]) / 2
+
+            return NeutrinoFlux(continuous_fluxes={'ev': ev, 'e': nuePDF(ev), 'mubar': nubarmuPDF(ev), 'mu': numuPDF(ev)},
                                 delta_fluxes={'mu': [(29, 1),(236, 0.013)]}, norm=4.9 * (10 ** 7)) ## default unit is /(cm^2*s)
         if flux_name == 'jsns_delayed':
-            def de(evv):
-                return (3 * ((evv / (2 / 3 * 52)) ** 2) - 2 * ((evv / (2 / 3 * 52)) ** 3)) / 29.25
-            def dmubar(evv):
-                return (3 * ((evv / 52) ** 2) - 2 * ((evv / 52) ** 3)) / 26
-            ev = np.linspace(0.001, 52, kwargs['npoints'] if 'npoints' in kwargs else 100)
-            return NeutrinoFlux(continuous_fluxes={'ev': ev, 'e': de(ev), 'mubar': dmubar(ev)}, norm=3 * (10 ** 7))
+            nu_e = np.genfromtxt(pkg_resources.resource_filename(__name__, "data/jsns2/jsns_nu_e.txt"), delimiter=',')
+            nubar_mu = np.genfromtxt(pkg_resources.resource_filename(__name__, "data/jsns2/jsns_nubar_mu.txt"), delimiter=',')
+
+            norm_nu_e = quad(self.interp_flux, 0, 300, args=(nu_e,))[0]
+            norm_nubar_mu = quad(self.interp_flux, 0, 300, args=(nubar_mu,))[0]
+
+            def nuePDF(energy):
+                return self.interp_flux(energy, nu_e) / norm_nu_e
+
+            def nubarmuPDF(energy):
+                return self.interp_flux(energy, nubar_mu) / norm_nubar_mu
+            
+            edges = np.arange(0, 302, 2) # energy bin edges
+            ev = (edges[:-1] + edges[1:]) / 2
+            return NeutrinoFlux(continuous_fluxes={'ev': ev, 'e': nuePDF(ev), 'mubar': nubarmuPDF(ev)}, norm=3 * (10 ** 7))
         if flux_name == 'jsns_prompt':
+            nu_mu = np.genfromtxt(pkg_resources.resource_filename(__name__, "data/jsns2/jsns_nu_mu_nodelta.txt"), delimiter=',')
+            norm_nu_mu = quad(self.interp_flux, 0, 300, args=(nu_mu,))[0]
+            
+            def numuPDF(energy):
+                return self.interp_flux(energy, nu_mu) / norm_nu_mu
+            
+            edges = np.arange(0, 302, 2) # energy bin edges
+            ev = (edges[:-1] + edges[1:]) / 2
+            
             return NeutrinoFlux(delta_fluxes={'mu': [(29, 1),(236, 0.013)]}, norm=1.85 * (10 ** 7))
         if flux_name == 'far_beam_nu':
             far_beam_txt = 'data/dune_beam_fd_nu_flux_120GeVoptimized.txt'
