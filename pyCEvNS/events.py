@@ -402,8 +402,6 @@ class DmEventsGen:
 
         n_meas = np.zeros((energy_bins.shape[0] * len(timing_bins), 2))
         n_dm = np.zeros(n_meas.shape[0])
-        if len(self.fx.timing) == 0:
-            return n_dm
 
         flat_index = 0
         for i in range(0, energy_bins.shape[0]):
@@ -411,6 +409,9 @@ class DmEventsGen:
                 n_meas[flat_index, 0] = energy_bins[i]
                 n_meas[flat_index, 1] = timing_bins[j]
                 flat_index += 1
+        
+        if len(self.fx.timing) == 0:
+            return n_dm, n_meas
         
         t_hist = np.histogram(self.fx.timing, bins=timing_edges)
         probs = t_hist[0] / len(self.fx.timing) # time distribution PDF
