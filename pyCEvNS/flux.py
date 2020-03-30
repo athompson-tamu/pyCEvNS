@@ -773,7 +773,7 @@ class DMFlux:
 
 class DMFluxIsoPhoton(FluxBaseContinuous):
     def __init__(self, photon_distribution, dark_photon_mass, coupling, dark_matter_mass, life_time=None,
-                 detector_distance=19.3, pot_rate=5e20, pot_sample=100000, det_area=0.0374,
+                 detector_distance=19.3, pot_rate=5e20, pot_sample=100000, brem_suppress=False,
                  pot_mu=0.7, pot_sigma=0.15, sampling_size=100, nbins=10, verbose=False):
         self.photon_flux = photon_distribution
         self.dp_m = dark_photon_mass
@@ -783,7 +783,6 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
         if life_time is not None:
             self.life_time = life_time * 1e-6
         self.det_dist = detector_distance  # meters
-        self.area = det_area # meters^2
         self.pot_rate = pot_rate  # the number of POT/day in the experiment
         self.pot_mu = pot_mu * 1e-6
         self.pot_sigma = pot_sigma * 1e-6
@@ -795,6 +794,7 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
         self.weight = []
         self.norm = 1
         self.sampling_size = sampling_size
+        self.supp = brem_suppress  # whether we add a suppression factor for Bremsstrahlung dark photon production phase space
         self.verbose = verbose
         for photon_events in photon_distribution:
             if self.verbose:
@@ -804,7 +804,7 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
         self.timing = np.array(self.time) * 1e6
         self.dm_timing = np.array(self.dm_time) * 1e6
         self.dp_timing = np.array(self.dp_time) * 1e6
-        normalization = self.epsilon ** 2 * (self.pot_rate / self.pot_sample) * self.area \
+        normalization = self.epsilon ** 2 * (self.pot_rate / self.pot_sample) \
                         / (4 * np.pi * (self.det_dist ** 2) * 24 * 3600) * (meter_by_mev**2)
         self.norm = normalization
         self.weight = [x * self.norm for x in self.weight]
@@ -838,6 +838,11 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
 
         # Directional sampling.
         dp_wgt = photon_events[1] / nsamples  # Event weight
+        # Brem suppression
+        if self.supp == True:
+            el_e = 1.0773*dp_e + 13.716  # most likely electron energy that produced this dark photon
+            supp_fact = min(1, 1154 * np.exp(-24.42 * np.power(dp_m/el_e, 0.3174)))
+            dp_wgt *= supp_fact
         for i in range(0, nsamples):
             t = 0
             pos = np.zeros(3)
@@ -860,7 +865,7 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
             # DM particle 1
             v = dm_momentum[1:] / dm_momentum[0] * c_light
             a = np.sum(v ** 2)
-            b = 2 * v[2] * (c_light * dp_p / dp_e) * t_dp #2 * np.sum(v) #
+            b = 2 * np.sum(v*pos) #2 * v[2] * (c_light * dp_p / dp_e) * t_dp
             c = np.sum(pos ** 2) - self.det_dist ** 2
             if b ** 2 - 4 * a * c >= 0:
                 t_dm = (-b - np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
@@ -884,7 +889,7 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
             # DM particle 2
             v = (dp_momentum - dm_momentum)[1:] / (dp_momentum - dm_momentum)[0] * c_light
             a = np.sum(v ** 2)
-            b = 2 * v[2] * (c_light * dp_p / dp_e) * t_dp # 2 * np.sum(v) # 
+            b = 2 * np.sum(v*pos) #2 * v[2] * (c_light * dp_p / dp_e) * t_dp 
             c = np.sum(pos ** 2) - self.det_dist ** 2
             if b ** 2 - 4 * a * c >= 0:
                 t_dm = (-b - np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
@@ -951,7 +956,7 @@ class DMFluxFromPiMinusAbsorption:
     """
     def __init__(self, dark_photon_mass, coupling_quark, dark_matter_mass, life_time=None,
                  detector_distance=19.3, pot_rate=5e20, pot_mu=0.7, pot_sigma=0.15, pion_rate=18324/500000,
-                 sampling_size=100000, det_area=0.0374):
+                 sampling_size=100000):
         """
         initialize and generate flux
         default values are COHERENT experiment values
@@ -978,7 +983,6 @@ class DMFluxFromPiMinusAbsorption:
         self.sigma = pot_sigma * 1e-6 * c_light / meter_by_mev
         self.pot_rate = pot_rate
         self.pion_rate = pion_rate
-        self.area = det_area
         self.sampling_size = sampling_size
         self.timing = []
         self.dm_timing = []
@@ -1046,7 +1050,7 @@ class DMFluxFromPiMinusAbsorption:
         self.ed_min = min(energy)
         self.ed_max = max(energy)
         self.norm = self.epsi_quark ** 2 * self.pot_rate * self.pion_rate / (4 * np.pi * (self.det_dist ** 2) * 24 * 3600) * \
-                    self.area * self.timing.shape[0] * 2 / self.sampling_size
+                    self.timing.shape[0] * 2 / self.sampling_size
 
     def __call__(self, ev):
         """
@@ -1130,7 +1134,7 @@ class DMFluxFromPi0Decay(FluxBaseContinuous):
     """
     def __init__(self, pi0_distribution, dark_photon_mass, coupling_quark, dark_matter_mass, life_time=None,
                  detector_distance=19.3, detector_direction=0, detector_width=0.1, pot_rate=5e20, pot_mu=0.7, pot_sigma=0.15,
-                 det_area=0.0374, pion_rate=52935/500000, nbins=50):
+                 pion_rate=52935/500000, nbins=50):
         self.dp_m = dark_photon_mass
         self.life_time = self.get_lifetime(coupling_quark, dark_photon_mass)
         if life_time is not None:
@@ -1152,7 +1156,7 @@ class DMFluxFromPi0Decay(FluxBaseContinuous):
         self.timing = np.array(self.time)*1e6
         hist, bin_edges = np.histogram(self.energy, bins=nbins, density=True)
         super().__init__((bin_edges[:-1]+bin_edges[1:])/2, hist,
-                         norm=self.epsilon**2*pot_rate*pion_rate*det_area*len(self.time)/len(pi0_distribution)/
+                         norm=self.epsilon**2*pot_rate*pion_rate*len(self.time)/len(pi0_distribution)/
                               (2*np.pi*(min(1.0, detector_direction+detector_width/2)-max(-1.0, detector_direction-detector_width/2))*detector_distance**2*24*3600)
                               *(meter_by_mev**2))
     
@@ -1195,7 +1199,7 @@ class DMFluxFromPi0Decay(FluxBaseContinuous):
         # dark matter arrives at detector, assuming azimuthal symmetric
         v = dm_momentum[1:]/dm_momentum[0]*c_light
         a = np.sum(v**2)
-        b = 2 * v[2] * (c_light * dp_p / dp_e) * t_dp #2*np.sum(v)
+        b = 2*np.sum(v*pos) #2 * v[2] * (c_light * dp_p / dp_e) * t_dp
         c = np.sum(pos**2) - self.det_dist**2
         if b**2 - 4*a*c >= 0:
             t_dm = (-b+np.sqrt(b**2-4*a*c))/(2*a)
@@ -1208,7 +1212,7 @@ class DMFluxFromPi0Decay(FluxBaseContinuous):
                 self.energy.append(dm_momentum[0])
         v = (dp_momentum-dm_momentum)[1:]/(dp_momentum-dm_momentum)[0]*c_light
         a = np.sum(v**2)
-        b = 2*np.sum(v)
+        b = 2*np.sum(v*pos)
         c = np.sum(pos**2) - self.det_dist**2
         if b**2 - 4*a*c >= 0:
             t_dm = (-b+np.sqrt(b**2-4*a*c))/(2*a)

@@ -43,8 +43,7 @@ def prompt_prob(ta, tb):
 def delayed_prob(ta, tb):
   return quad(delayed_time, ta, tb)[0] / integral_delayed
 
-prompt_flux = Flux('prompt')
-delayed_flux = Flux('delayed')
+
 brem_photons = np.genfromtxt("data/jsns/brem.txt")  # binned photon spectrum from
 Pi0Info = np.genfromtxt("data/jsns/Pi0_Info.txt")
 pion_energy = Pi0Info[:,4] - massofpi0
@@ -72,10 +71,10 @@ def get_energy_bins(e_a, e_b):
 
 
 # Set up energy and timing bins
-hi_energy_cut = 3000  # mev
+hi_energy_cut = 300  # mev
 lo_energy_cut = 0.0  # mev
-hi_timing_cut = 0.5
-lo_timing_cut = 0.0
+hi_timing_cut = 0.25
+lo_timing_cut = 0.1
 energy_edges = np.linspace(lo_energy_cut, hi_energy_cut,51) #get_energy_bins(lo_energy_cut, hi_energy_cut)
 energy_bins = (energy_edges[:-1] + energy_edges[1:]) / 2
 timing_edges = np.linspace(lo_timing_cut, hi_timing_cut, 10)
@@ -110,11 +109,11 @@ for i in range(0, energy_bins.shape[0]):
     e_b = energy_edges[i + 1]
     n_prompt[flat_index] = efficiency(energy_bins[i] * pe_per_mev) * \
                   gen.events(e_a, e_b, 'mu', prompt_flux, det, exposure) * \
-                    prompt_prob(timing_edges[j], timing_edges[j+1]) * det_area_cm2 # provisional area factor
+                    prompt_prob(timing_edges[j], timing_edges[j+1])
     n_delayed[flat_index] = efficiency(energy_bins[i] * pe_per_mev) * \
                    (gen.events(e_a, e_b, 'e', delayed_flux, det, exposure)
                     + gen.events(e_a, e_b, 'mubar', delayed_flux, det, exposure)) * \
-                      delayed_prob(timing_edges[j], timing_edges[j+1]) * det_area_cm2 # provisional area factor
+                      delayed_prob(timing_edges[j], timing_edges[j+1])
     flat_index += 1
 
 n_nu = n_prompt + n_delayed
@@ -126,11 +125,11 @@ def GetDMEvents(m_chi, m_dp, m_med, g):
     dm_gen = DmEventsGen(dark_photon_mass=m_dp, dark_matter_mass=m_chi, life_time=0.001, expo=exposure, detector_type='jsns_scintillator')
     brem_flux = DMFluxIsoPhoton(brem_photons, dark_photon_mass=m_dp, coupling=g, dark_matter_mass=m_chi,
                               detector_distance=24, pot_mu=pot_mu, pot_sigma=pot_sigma, pot_sample=1e5,
-                              sampling_size=1000, det_area=18, verbose=False)
+                              sampling_size=1000, brem_suppress=True, verbose=False)
     pim_flux = DMFluxFromPiMinusAbsorption(dark_photon_mass=m_dp, coupling_quark=g, dark_matter_mass=m_chi, pion_rate=pim_rate,
-                                           pot_mu=pot_mu, pot_sigma=pot_sigma, detector_distance=24, det_area=18)
+                                           pot_mu=pot_mu, pot_sigma=pot_sigma, detector_distance=24)
     pi0_flux = DMFluxFromPi0Decay(pi0_distribution=pion_flux, dark_photon_mass=m_dp, coupling_quark=g, dark_matter_mass=m_chi,
-                                  pot_mu=pot_mu, pot_sigma=pot_sigma, detector_distance=24, det_area=18)
+                                  pot_mu=pot_mu, pot_sigma=pot_sigma, detector_distance=24)
     
     dm_gen.fx = brem_flux
     brem_events = dm_gen.events(m_med, g, energy_edges, timing_edges, channel="electron")
@@ -143,10 +142,8 @@ def GetDMEvents(m_chi, m_dp, m_med, g):
 
     return brem_events[0] + pim_events[0] + pi0_events[0]
 
-#dm_events3 = GetDMEvents(m_chi=5, m_dp=200, m_med=25, g=1e-4)
-dm_events4 = GetDMEvents(m_chi=5, m_dp=300, m_med=25, g=1e-4)
 dm_events1 = GetDMEvents(m_chi=5, m_dp=75, m_med=25, g=1e-4)
-#dm_events2 = GetDMEvents(m_chi=5, m_dp=129, m_med=25, g=1e-4)
+dm_events2 = GetDMEvents(m_chi=5, m_dp=300, m_med=25, g=1e-4)
 
 
 
@@ -190,24 +187,29 @@ plt.hist([flat_energies,flat_energies], weights=[n_prompt, n_delayed], bins=ener
          stacked=True, histtype='stepfilled', density=density, color=['black','dimgray'], label=["Prompt", "Delayed"])
 plt.hist(flat_energies,weights=dm_events1,bins=energy_edges,
          histtype='step', density=density, label=r"DM ($M_{A^\prime} = 75$ MeV)")
-plt.hist(flat_energies,weights=dm_events4,bins=energy_edges,
+plt.hist(flat_energies,weights=dm_events2,bins=energy_edges,
          histtype='step', density=density, label=r"DM ($M_{A^\prime} = 300$ MeV)")
-"""
-plt.hist(energy_bins,weights=dm_events2,bins=energy_edges,
-         histtype='step', density=density, label=r"DM ($M_{A^\prime} = 129$ MeV)")
-plt.hist(energy_bins,weights=dm_events3,bins=energy_edges,
-         histtype='step', density=density, label=r"DM ($M_{A^\prime} = 200$ MeV)")
-
-"""
-plt.xlabel(r"$E_r$ [MeV]")
+plt.xlabel(r"$E_r$ [MeVer]")
 plt.yscale("log")
 plt.ylabel(r"Events")
-plt.title(r"$\epsilon=10^{-4}$, $M_X = 25$ MeV, $m_{\chi} = 5$ MeV, timing cut $t < 0.5$ $\mu$s", loc='right')
+plt.title(r"$\epsilon=10^{-4}$, $M_X = 25$ MeV, $m_{\chi} = 5$ MeV, timing cut $0.1 < t < 0.25$ $\mu$s", loc='right')
 plt.xlim((lo_energy_cut,hi_energy_cut))
 plt.legend()
-plt.savefig("plots/jsns2/neutrino_dm_spectra_5e-1mus.png")
+plt.savefig("plots/jsns2/neutrino_dm_spectra_25e-2mus.png")
 plt.show()
+plt.clf()
 
+density = True
+plt.hist([flat_times,flat_times], weights=[n_prompt, n_delayed], bins=timing_edges,
+         stacked=True, histtype='stepfilled', density=density, color=['black','dimgray'], label=["Prompt", "Delayed"])
+plt.hist(flat_times,weights=dm_events1,bins=timing_edges,
+         histtype='step', density=density, label=r"DM ($M_{A^\prime} = 75$ MeV)")
+plt.hist(flat_times,weights=dm_events2,bins=timing_edges,
+         histtype='step', density=density, label=r"DM ($M_{A^\prime} = 300$ MeV)")
+plt.xlabel(r"$t$ [$\mu$s]")
+plt.ylabel(r"Events")
+plt.legend()
+plt.show()
 
 
 

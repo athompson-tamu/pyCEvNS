@@ -70,7 +70,9 @@ pim_heavy_norm = dm_pim_heavy.norm*np.ones(dm_pim_heavy.timing.shape[0]) / dm_pi
 pi0_short_norm = dm_pi0_short.norm*np.ones(dm_pi0_short.timing.shape[0]) / dm_pi0_short.timing.shape[0]
 pi0_long_norm = dm_pi0_long.norm*np.ones(dm_pi0_long.timing.shape[0]) / dm_pi0_long.timing.shape[0]
 
-
+print("pim weights = ", dm_pim_short.timing.shape[0], np.sum(pim_short_norm))
+print("pi0 weights = ", dm_pi0_short.timing.shape[0], np.sum(pi0_short_norm))
+print("brem weights = ", dm_brem_short.timing.shape[0], np.sum(dm_brem_short.weight))
 
 # Add in the pi- events.
 times_short = np.append(np.append(dm_brem_short.timing, dm_pim_short.timing), dm_pi0_short.timing)
@@ -84,7 +86,7 @@ weights_heavy = np.append(dm_brem_heavy.weight, pim_heavy_norm)
 
 
 # Plot timing spectra.
-time_bins = np.linspace(0,3,90)
+time_bins = np.linspace(0,3,200)
 density = True
 plt.hist(times_short, weights=weights_short, bins=time_bins,
  histtype='step', density=density, color='red', label=r"$M_{A^\prime} = 75$ MeV, $\tau \leq 0.001$ $\mu$s")
