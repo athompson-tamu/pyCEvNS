@@ -1,65 +1,153 @@
-import matplotlib.pyplot as plt
-from scipy.interpolate import UnivariateSpline
-import numpy as np
-
 import sys
 
+from pyCEvNS.events import *
+from pyCEvNS.flux import *
 
-def main(experiment, savename, labelname):
-        beam = np.genfromtxt('data/beam.txt')
-        eeinva = np.genfromtxt('data/eeinva.txt')
-        lep = np.genfromtxt('data/lep.txt')
-        nomad = np.genfromtxt('data/nomad.txt')
+from scipy import signal
+import matplotlib.pyplot as plt
+import numpy as np
+from numpy import sqrt, pi
+from scipy.interpolate import UnivariateSpline
+from matplotlib.pylab import rc
 
-        dir = "limits/" + experiment + "/"
-
-
-        #lower = np.genfromtxt("lower_limit_ar_coherent.txt")
-        upper = np.genfromtxt(dir + "upper_limit.txt")
-        removed = np.genfromtxt(dir + "removed_limit.txt")
-        scatter = np.genfromtxt(dir + "scatter_limit.txt")
-        scatter_trimmed = np.genfromtxt(dir + "scatter_limit_trimmed.txt")
-        upper = np.flip(np.flip(upper[4:,:],axis=1))
-        upper = upper[(upper[:,1] > 0)]
-        fit = np.poly1d(np.polyfit(np.log10(upper[:,0]), np.log10(upper[:,1]), 1))
+rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
+rc('text', usetex=True)
 
 
-        total_limit = np.vstack((scatter[:-2,:], removed, upper))
-        total_limit = total_limit[(total_limit[:,1] > 0)]
-        total_limit = np.vstack((total_limit, [0.1, 10**fit(-1)]))
+def plot_singlemed():
+        # Plot single-mediator limits
+        # get existing limits
+        relic = np.genfromtxt('pyCEvNS/data/dark_photon_limits/relic.txt', delimiter=",")
+        ldmx = np.genfromtxt('pyCEvNS/data/dark_photon_limits/ldmx.txt')
+        lsnd = np.genfromtxt('pyCEvNS/data/dark_photon_limits/lsnd.csv', delimiter=",")
+        miniboone = np.genfromtxt('pyCEvNS/data/dark_photon_limits/miniboone.csv', delimiter=",")
+        na64 = np.genfromtxt('pyCEvNS/data/dark_photon_limits/na64.csv', delimiter=",")
+
+        # Convert from GeV mass to MeV
+        lsnd[:,0] *= 1000
+        miniboone[:,0] *= 1000
+        miniboone[:,2] *= 1000
+        na64[:,0] *= 1000
+
+        #ldmx[:,1] *= 2 * (3**4)
+        na64[:,1] *= 4*pi * (3**4)
+        lsnd[:,1] *= 4*pi * (3**4)  # TODO: check this
+        miniboone[:,1] *= 4*pi * (3**4)
+        miniboone[:,3] *= 4*pi * (3**4)
+        
+        # Load derived limits.
+        ccm_loose = np.genfromtxt("limits/ccm/dark_photon_limits_ccm_loose.txt", delimiter=",")
+        ccm_tight = np.genfromtxt("limits/ccm/dark_photon_limits_ccm_tight.txt", delimiter=",")
+        coherent = np.genfromtxt("limits/coherent/dark_photon_limits_coh_singlemed_csi-lar.txt", delimiter=",")
+        coherent_futureLAr = np.genfromtxt("limits/coherent/dark_photon_limits_coh_singlemed_futureLAr.txt", delimiter=",")
+        jsns2 = np.genfromtxt("limits/jsns2/dark_photon_limits_jsns_singlemed.txt", delimiter=",")
 
 
-        fig, ax = plt.subplots()
+        # Plot the existing limits.
+        plt.fill_between(miniboone[:,0], miniboone[:,1], y2=1, color="royalblue", alpha=0.3, label='MiniBooNE \n (Nucleus)')
+        plt.fill_between(na64[:,0], na64[:,1], y2=1, color="maroon", alpha=0.3, label='NA64')
+        plt.fill_between(miniboone[:,2], miniboone[:,3], y2=1, color="orchid", alpha=0.3, label='MiniBooNE \n (Electron)')
+        plt.fill_between(lsnd[:,0], lsnd[:,1], y2=1, color="crimson", alpha=0.3, label='LSND')
 
-        ax.plot(total_limit[:,0]*1e6, total_limit[:,1]*1e3,label=labelname)
-        #plt.plot(upper[:,0]*1e6, 10**(fit(np.log10(upper[:,0])))*1e3, marker=".")
+        plt.plot(miniboone[:,0], miniboone[:,1], color="royalblue", ls="dashed")
+        plt.plot(na64[:,0], na64[:,1], color="maroon", ls="dashed")
+        plt.plot(miniboone[:,2], miniboone[:,3], color="orchid", ls="dashed")
+        plt.plot(lsnd[:,0], lsnd[:,1], color="crimson", ls="dashed")
 
-        #ax.plot(lower[:,0]*1e6, lower[:,1]*1e3, label="ext")
-        #ax.plot(upper[:,0]*1e6, upper[:,1]*1e3, marker="o", label="hi")
-        #ax.plot(removed[:,0]*1e6, removed[:,1]*1e3, marker="o", label="lo (r)", ls="--")
-        #ax.plot(scatter[:-2,0]*1e6, scatter[:-2,1]*1e3, marker="o", label="scatter")
-        #ax.plot(scatter_trimmed[:,0]*1e6, scatter_trimmed[:,1]*1e3, marker="o", label="scatter_trimmed", ls="--")
+        # Plot relic density limit
+        plt.plot(relic[:,0], relic[:,1], color="k", linewidth=2, label="Relic Density")
 
-        ax.fill(beam[:,0], beam[:,1], label='Beam Dump', alpha=0.5)
-        ax.fill(np.hstack((eeinva[:,0], np.min(eeinva[:,0]))), np.hstack((eeinva[:,1], np.max(eeinva[:,1]))),
-                label=r'$e^+e^-\rightarrow inv.+\gamma$', alpha=0.5)
-        ax.fill(lep[:,0], lep[:,1], label='LEP', alpha=0.5)
-        ax.fill(np.hstack((nomad[:,0], np.min(nomad[:,0]))), np.hstack((nomad[:,1], np.max(nomad[:,1]))),
-                label='NOMAD', alpha=0.5)
-        ax.set_xlim(1,1e10)
-        ax.set_ylim(10**(-8),1)
-        ax.set_xlabel(r"$m_a$ [eV]")
-        ax.set_ylabel('$g_{a\gamma\gamma}$ [GeV$^{-1}$]')
-        plt.legend(loc="upper left", framealpha=1)
-        plt.xscale('log')
-        plt.yscale('log')
+        # Plot the derived limits
+        plt.plot(ccm_tight[:,0], ccm_tight[:,1], label="CCM LAr (Tight WP)", linewidth=2, color="dodgerblue")
+        plt.plot(ccm_loose[:,0], ccm_loose[:,1], label="CCM LAr (Loose WP)", linewidth=2, ls='dashed', color="dodgerblue")
+        plt.plot(coherent[:,0], coherent[:,1], label="COHERENT CsI + LAr", linewidth=2, color="crimson")
+        plt.plot(coherent_futureLAr[:,0], coherent_futureLAr[:,1], label="COHERENT Future-LAr", linewidth=2, ls='dashed', color="crimson")
+        plt.plot(jsns2[:,0], jsns2[:,1], label=r"JSNS$^2$", linewidth=2, color="orange")
+        
+        plt.title(r"Single-mediator scenario; $m_V = m_X = 3m_\chi$ MeV", loc='right', fontsize=15)
+        plt.legend(loc="upper left", ncol=2, fontsize=10, framealpha=1.0)
 
-        png_str = "plots/ccm_limits/" + savename + ".png"
-        pdf_str = "plots/ccm_limits/" + savename + ".pdf"
+        plt.xscale("Log")
+        plt.yscale("Log")
+        plt.xlim((1, 5e2))
+        plt.ylim((1e-11,2e-4))
+        plt.xticks(fontsize=13)
+        plt.yticks(fontsize=13)
+        plt.ylabel(r"$\epsilon \kappa^X_f \kappa^X_D$", fontsize=15)
+        plt.xlabel(r"$m_X$ [MeV]", fontsize=15)
+        plt.tight_layout()
+        plt.savefig("paper_plots/combined_limits_singlemed.png")
+        plt.show()
+        plt.clf()
 
-        plt.savefig(png_str)
-        plt.savefig(pdf_str)
+
+def plot_doublemed():
+        # Plot single-mediator limits
+        # get existing limits
+        relic = np.genfromtxt('pyCEvNS/data/dark_photon_limits/relic.txt', delimiter=",")
+        ldmx = np.genfromtxt('pyCEvNS/data/dark_photon_limits/ldmx.txt')
+        lsnd = np.genfromtxt('pyCEvNS/data/dark_photon_limits/lsnd.csv', delimiter=",")
+        miniboone = np.genfromtxt('pyCEvNS/data/dark_photon_limits/miniboone.csv', delimiter=",")
+        na64 = np.genfromtxt('pyCEvNS/data/dark_photon_limits/na64.csv', delimiter=",")
+
+        # Convert from GeV mass to MeV
+        lsnd[:,0] *= 1000
+        miniboone[:,0] *= 1000
+        miniboone[:,2] *= 1000
+        na64[:,0] *= 1000
+
+        #ldmx[:,1] *= 2 * (3**4)
+        na64[:,1] *= 4*pi * (3**4)
+        lsnd[:,1] *= 4*pi * (3**4)  # TODO: check this
+        miniboone[:,1] *= 4*pi * (3**4)
+        miniboone[:,3] *= 4*pi * (3**4)
+        
+        # Double-mediator
+        ccm_loose = np.genfromtxt("limits/ccm/dark_photon_limits_doublemed_ccm_loose.txt", delimiter=",")
+        ccm_tight = np.genfromtxt("limits/ccm/dark_photon_limits_doublemed_ccm_tight.txt", delimiter=",")
+        coherent = np.genfromtxt("limits/coherent/dark_photon_limits_coh_doublemed_csi-lar.txt", delimiter=",")
+        coherent_futureLAr = np.genfromtxt("limits/coherent/dark_photon_limits_coh_doublemed_futureLAr.txt", delimiter=",")
+        jsns2 = np.genfromtxt("limits/jsns2/dark_photon_limits_jsns_doublemed.txt", delimiter=",")
+
+
+        # Plot the existing limits.
+        plt.fill_between(miniboone[:,0], miniboone[:,1], y2=1, color="royalblue", alpha=0.3, label='MiniBooNE \n (Nucleus)')
+        plt.fill_between(na64[:,0], na64[:,1], y2=1, color="maroon", alpha=0.3, label='NA64')
+        plt.fill_between(miniboone[:,2], miniboone[:,3], y2=1, color="orchid", alpha=0.3, label='MiniBooNE \n (Electron)')
+        plt.fill_between(lsnd[:,0], lsnd[:,1], y2=1, color="crimson", alpha=0.3, label='LSND')
+
+        plt.plot(miniboone[:,0], miniboone[:,1], color="royalblue", ls="dashed")
+        plt.plot(na64[:,0], na64[:,1], color="maroon", ls="dashed")
+        plt.plot(miniboone[:,2], miniboone[:,3], color="orchid", ls="dashed")
+        plt.plot(lsnd[:,0], lsnd[:,1], color="crimson", ls="dashed")
+
+        # Plot relic density limit
+        plt.plot(relic[:,0], relic[:,1], color="k", linewidth=2, label="Relic Density")
+
+        # Plot the derived limits
+        plt.plot(ccm_tight[:,0], ccm_tight[:,1], label="CCM LAr (Tight WP)", linewidth=2, color="dodgerblue")
+        plt.plot(ccm_loose[:,0], ccm_loose[:,1], label="CCM LAr (Loose WP)", linewidth=2, ls='dashed', color="dodgerblue")
+        plt.plot(coherent[:,0], coherent[:,1], label="COHERENT CsI + LAr", linewidth=2, color="crimson")
+        plt.plot(coherent_futureLAr[:,0], coherent_futureLAr[:,1], label="COHERENT Future-LAr", linewidth=2, ls='dashed', color="crimson")
+        plt.plot(jsns2[:,0], jsns2[:,1], label=r"JSNS$^2$", linewidth=2, color="orange")
+        
+        plt.title(r"Double-mediator scenario; $m_X=75$ MeV, $m_\chi =25$ MeV", loc='right', fontsize=15)
+        plt.legend(loc="upper left", ncol=2, fontsize=10, framealpha=1.0)
+
+        plt.xscale("Log")
+        plt.yscale("Log")
+        plt.xlim((1, 5e2))
+        plt.ylim((1e-11,2e-4))
+        plt.ylabel(r"$\epsilon \kappa^V_f \kappa^V_D$", fontsize=15)
+        plt.xlabel(r"$m_V$ [MeV]", fontsize=15)
+        plt.xticks(fontsize=13)
+        plt.yticks(fontsize=13)
+        plt.tight_layout()
+        plt.savefig("paper_plots/combined_limits_doublemed.png")
+        plt.show()
+        plt.clf()
 
 
 if __name__ == "__main__":
-        main(str(sys.argv[1]), str(sys.argv[2]), str(sys.argv[3]))
+        plot_singlemed()
+        plot_doublemed()

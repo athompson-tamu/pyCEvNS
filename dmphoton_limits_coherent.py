@@ -59,10 +59,6 @@ def efficiency_lar(pe):
     k = 0.4942
     x0 = 10.8507
     f = a / (1 + np.exp(-k * (pe - x0)))
-    if pe < 5:
-        return 0
-    if pe < 6:
-        return 0.5 * f
     return f
 
 
@@ -70,6 +66,8 @@ def efficiency_lar(pe):
 pe_per_mev = 0.0878 * 13.348 * 1000
 exp_csi = 4466
 exp_ar = 1.5*274* 24  # tweaked to data
+exp_future_lar = 685 * 3 * 365 * (19.3/28)**2
+#exp_ar = exp_future_lar
 pim_rate = 0.0457
 
 
@@ -147,11 +145,11 @@ for i in range(0, energy_bins_lar.shape[0]):
     n_meas_lar[flat_index, 1] = timing_bins_lar[j]
     flat_index += 1
 
-#for i in range(0, n_meas.shape[0]):
-#  n_bg_lar[i] = (226 / (energy_bins.shape[0]) * prompt_time(n_meas[i,1])) + (10 / (energy_bins.shape[0]) * delayed_time(n_meas[i,1]))
+for i in range(0, n_meas.shape[0]):
+  n_bg_lar[i] = (226 / (energy_bins.shape[0]) * prompt_time(n_meas[i,1])) + (10 / (energy_bins.shape[0]) * delayed_time(n_meas[i,1]))
 
-flat_energies_lar = n_meas[:,0]
-flat_times_lar = n_meas[:,1]
+flat_energies_lar = n_meas_lar[:,0]
+flat_times_lar = n_meas_lar[:,1]
 
 
 flat_index = 0
@@ -173,8 +171,8 @@ n_nu_lar = n_prompt_lar+n_delayed_lar
 
 # Combine the neutrino events
 n_nu = n_nu_csi
-#n_nu = np.append(n_nu_csi), n_nu_lar*0.46)  # effective reduction of flux due to distance
-#n_bg = np.append(n_bg), n_bg_lar)
+n_nu = np.append(n_nu_csi, n_nu_lar)  # effective reduction of flux due to distance
+n_bg = np.append(n_bg, n_bg_lar)
 
 
 
@@ -187,92 +185,62 @@ pion_azimuth = np.arccos(Pi0Info[:,3] / np.sqrt(Pi0Info[:,1]**2 + Pi0Info[:,2]**
 pion_cos = np.cos(np.pi/180 * Pi0Info[:,0])
 pion_flux = np.array([pion_azimuth, pion_cos, pion_energy])
 pion_flux = pion_flux.transpose()
-def GetDMEvents(g, m_dp, m_chi, m_med):
-    dm_gen = DmEventsGen(dark_photon_mass=m_dp, dark_matter_mass=m_chi,
+
+# Initialize classes.
+dm_gen = DmEventsGen(dark_photon_mass=75, dark_matter_mass=25,
                          life_time=0.001, expo=exp_csi, detector_type='csi')
-    dm_gen_lar = DmEventsGen(dark_photon_mass=m_dp, dark_matter_mass=m_chi,
-                         life_time=0.001, expo=exp_csi, detector_type='ar')
-    brem_flux = DMFluxIsoPhoton(brem_photons, dark_photon_mass=m_dp, coupling=1,
-                                dark_matter_mass=m_chi, pot_sample=1e5,
-                                sampling_size=1000, life_time=0.0001,
-                                detector_distance=19.3, brem_suppress=True, verbose=False)
-    pim_flux = DMFluxFromPiMinusAbsorption(dark_photon_mass=m_dp, coupling_quark=1,
-                                           dark_matter_mass=m_chi,
-                                           pion_rate=pim_rate, detector_distance=19.3,
-                                           life_time=0.0001)
-    pi0_flux = DMFluxFromPi0Decay(pi0_distribution=pion_flux,
-                                  dark_photon_mass=m_dp, coupling_quark=1,
-                                  dark_matter_mass=m_chi, detector_distance=19.3,
-                                  life_time=0.0001)
+dm_gen_lar = DmEventsGen(dark_photon_mass=75, dark_matter_mass=25,
+                         life_time=0.001, expo=exp_ar, detector_type='ar')
+
+brem_flux = DMFluxIsoPhoton(brem_photons, dark_photon_mass=75, coupling=1,
+                            dark_matter_mass=25, pot_sample=1e5,
+                            sampling_size=1000, life_time=0.0001,
+                            detector_distance=19.3, brem_suppress=True, verbose=False)
+pim_flux = DMFluxFromPiMinusAbsorption(dark_photon_mass=75, coupling_quark=1,
+                                        dark_matter_mass=25,
+                                        pion_rate=pim_rate, detector_distance=19.3,
+                                        life_time=0.0001)
+pi0_flux = DMFluxFromPi0Decay(pi0_distribution=pion_flux,
+                              dark_photon_mass=75, coupling_quark=1,
+                              dark_matter_mass=25, detector_distance=19.3,
+                              life_time=0.0001)
+def GetDMEvents(g, m_dp, m_chi, m_med):
+    dm_gen.dp_mass = m_med
+    dm_gen_lar.dp_mass = m_med
+    dm_gen.dm_mass = m_chi
+    dm_gen_lar.dm_mass = m_chi
+    
+    brem_flux.dp_m = m_dp
+    brem_flux.dm_m = m_chi
+    pim_flux.dp_m = m_dp
+    pim_flux.dm_m = m_chi
+    pi0_flux.dp_m = m_dp
+    pi0_flux.dm_m = m_chi
+    
+    brem_flux.simulate()
+    pim_flux.simulate()
+    pi0_flux.simulate()
     
     dm_gen.fx = brem_flux
     dm_gen_lar.fx = brem_flux
     brem_events = dm_gen.events(m_med, g, energy_edges, timing_edges,
                                 channel="nucleus")[0]
-    brem_events = np.append(brem_events,
-                            dm_gen_lar.events(m_med, g, energy_edges_lar,
-                                              timing_edges_lar, channel="nucleus")[0])
+    brem_events_lar = dm_gen_lar.events(m_med, g, energy_edges_lar, timing_edges_lar, channel="nucleus")[0]
+    brem_events = np.append(brem_events, brem_events_lar)
 
     dm_gen.fx = pim_flux
     dm_gen_lar.fx = pim_flux
     pim_events = dm_gen.events(m_med, g, energy_edges, timing_edges,
                                channel="nucleus")[0]
-    pim_events = np.append(pim_events,
-                           dm_gen_lar.events(m_med, g, energy_edges_lar,
-                                             timing_edges_lar, channel="nucleus")[0])
+    pim_events_lar = dm_gen_lar.events(m_med, g, energy_edges_lar, timing_edges_lar, channel="nucleus")[0]
+    pim_events = np.append(pim_events, pim_events_lar)
 
     dm_gen.fx = pi0_flux
     dm_gen_lar.fx = pi0_flux
     pi0_events = dm_gen.events(m_med, g, energy_edges, timing_edges,
                                channel="nucleus")[0]
-    pi0_events = np.append(pi0_events,
-                           dm_gen_lar.events(m_med, g, energy_edges_lar,
-                                             timing_edges_lar, channel="nucleus")[0])
-
-    return brem_events + pim_events + pi0_events
-
-
-brem_flux_2med = DMFluxIsoPhoton(brem_photons, dark_photon_mass=75, coupling=1,
-                                dark_matter_mass=m_chi, pot_sample=1e5,
-                                sampling_size=1000, life_time=0.0001,
-                                detector_distance=19.3, brem_suppress=True, verbose=False)
-pim_flux_2med = DMFluxFromPiMinusAbsorption(dark_photon_mass=75, coupling_quark=1,
-                                        dark_matter_mass=m_chi,
-                                        pion_rate=pim_rate, detector_distance=19.3,
-                                        life_time=0.0001)
-pi0_flux_2med = DMFluxFromPi0Decay(pi0_distribution=pion_flux,
-                              dark_photon_mass=75, coupling_quark=1,
-                              dark_matter_mass=m_chi, detector_distance=19.3,
-                              life_time=0.0001)
-def GetDMEventsDoubleMediator(g, m_med):
-    dm_gen = DmEventsGen(dark_photon_mass=75, dark_matter_mass=m_med/3,
-                         life_time=0.001, expo=exp_csi, detector_type='csi')
-    dm_gen_lar = DmEventsGen(dark_photon_mass=75, dark_matter_mass=m_med/3,
-                             life_time=0.001, expo=exp_csi, detector_type='ar')
-    
-    dm_gen.fx = brem_flux_2med
-    dm_gen_lar.fx = brem_flux_2med
-    brem_events = dm_gen.events(m_med, g, energy_edges, timing_edges,
-                                channel="nucleus")[0]
-    brem_events = np.append(brem_events,
-                            dm_gen_lar.events(m_med, g, energy_edges_lar,
-                                              timing_edges_lar, channel="nucleus")[0])
-
-    dm_gen.fx = pim_flux_2med
-    dm_gen_lar.fx = pim_flux_2med
-    pim_events = dm_gen.events(m_med, g, energy_edges, timing_edges,
-                               channel="nucleus")[0]
-    pim_events = np.append(pim_events,
-                           dm_gen_lar.events(m_med, g, energy_edges_lar,
-                                             timing_edges_lar, channel="nucleus")[0])
-
-    dm_gen.fx = pi0_flux_2med
-    dm_gen_lar.fx = pi0_flux_2med
-    pi0_events = dm_gen.events(m_med, g, energy_edges, timing_edges,
-                               channel="nucleus")[0]
-    pi0_events = np.append(pi0_events,
-                           dm_gen_lar.events(m_med, g, energy_edges_lar,
-                                             timing_edges_lar, channel="nucleus")[0])
+    pi0_events_lar = dm_gen_lar.events(m_med, g, energy_edges_lar, timing_edges_lar, channel="nucleus")[0]
+    pi0_events = np.append(pi0_events, pi0_events_lar)
 
     return brem_events + pim_events + pi0_events
 
@@ -289,7 +257,7 @@ def SimpleChi2(sig, bkg):
     likelihood = (sig)**2 / np.sqrt(bkg**2 + 1)
     return np.sum(likelihood)
 
-mlist = np.logspace(1, np.log10(400), 5)
+mlist = np.logspace(0, np.log10(400), 7)
 eplist = np.ones_like(mlist)
 tmp = np.logspace(-20, 0, 20)
 
@@ -309,7 +277,7 @@ else:
         while hi - lo > 0.05:
             mid = (hi + lo) / 2
             print("------- trying g = ", 10**mid)
-            lg = SimpleChi2(GetDMEvents(10**mid, mlist[i], 4.9, mlist[i]),
+            lg = SimpleChi2(GetDMEvents(10**mid, 75, 25, mlist[i]),
                             n_bg + n_nu)
             print("lg = ", lg)
             if lg < 6.18:
@@ -375,6 +343,6 @@ plt.ylim((1e-11,3e-5))
 plt.ylabel(r"$(\epsilon^\chi)^2$", fontsize=13)
 plt.xlabel(r"$M_{A^\prime}$ [MeV]", fontsize=13)
 plt.tight_layout()
-plt.savefig("paper_plots/coherent_limits_singlemed_20keVEcut.png")
+#plt.savefig("paper_plots/coherent_limits_singlemed_futureLAr.png")
 plt.show()
 

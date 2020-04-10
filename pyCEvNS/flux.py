@@ -774,7 +774,8 @@ class DMFlux:
 class DMFluxIsoPhoton(FluxBaseContinuous):
     def __init__(self, photon_distribution, dark_photon_mass, coupling, dark_matter_mass, life_time=None,
                  detector_distance=19.3, pot_rate=5e20, pot_sample=100000, brem_suppress=False,
-                 pot_mu=0.7, pot_sigma=0.15, sampling_size=100, nbins=10, verbose=False):
+                 pot_mu=0.7, pot_sigma=0.15, sampling_size=100, nbins=20, verbose=False):
+        self.nbins = nbins
         self.photon_flux = photon_distribution
         self.dp_m = dark_photon_mass
         self.dm_m = dark_matter_mass
@@ -799,7 +800,7 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
         for photon_events in photon_distribution:
             if self.verbose:
                 print("getting photons from E =", photon_events[0], "Size =", photon_events[1])
-            self._generate(photon_events, self.sampling_size)
+            self._generate_single(photon_events, self.sampling_size)
 
         self.timing = np.array(self.time) * 1e6
         self.dm_timing = np.array(self.dm_time) * 1e6
@@ -815,13 +816,28 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
     def get_lifetime(self, g, m):
         return ((16 * np.pi ** 2) / ((g ** 2) * m)) * mev_per_hz
 
-
     def getScaledWeights(self):
         wgt = self.weight
         wgt = [x * self.norm * 24 * 3600 / (meter_by_mev**2) for x in wgt]
         return wgt
 
-    def _generate(self, photon_events, nsamples):
+    def simulate(self):
+        for photon_events in self.photon_flux:
+            if self.verbose:
+                print("getting photons from E =", photon_events[0], "Size =", photon_events[1])
+            self._generate_single(photon_events, self.sampling_size)
+
+        self.timing = np.array(self.time) * 1e6
+        self.dm_timing = np.array(self.dm_time) * 1e6
+        self.dp_timing = np.array(self.dp_time) * 1e6
+        normalization = self.epsilon ** 2 * (self.pot_rate / self.pot_sample) \
+                        / (4 * np.pi * (self.det_dist ** 2) * 24 * 3600) * (meter_by_mev**2)
+        self.norm = normalization
+        self.weight = [x * self.norm for x in self.weight]
+        hist, bin_edges = np.histogram(self.energy, bins=self.nbins, weights=self.weight, density=True)
+        super().__init__((bin_edges[:-1] + bin_edges[1:]) / 2, hist, norm=np.sum(self.weight))
+
+    def _generate_single(self, photon_events, nsamples):
         # Initiate photon position, energy and momentum.
         if photon_events[0]**2 < self.dp_m**2:
             return
@@ -991,14 +1007,14 @@ class DMFluxFromPiMinusAbsorption:
         self.ed_min = None
         self.ed_max = None
         self.norm = None
-        self._generate()
+        self.simulate()
         self.ev_min = self.ed_min
         self.ev_max = self.ed_max
 
     def get_lifetime(self, g, m):
         return ((16 * np.pi ** 2) / ((g ** 2) * m)) * mev_per_hz
 
-    def _generate(self):
+    def simulate(self):
         """
         generate dark matter flux
         """
@@ -1049,6 +1065,8 @@ class DMFluxFromPiMinusAbsorption:
         self.energy = np.array(energy)
         self.ed_min = min(energy)
         self.ed_max = max(energy)
+        self.ev_min = self.ed_min
+        self.ev_max = self.ed_max
         self.norm = self.epsi_quark ** 2 * self.pot_rate * self.pion_rate / (4 * np.pi * (self.det_dist ** 2) * 24 * 3600) * \
                     self.timing.shape[0] * 2 / self.sampling_size
 
@@ -1088,7 +1106,7 @@ class DMFluxFromPiMinusAbsorption:
         self.sigma = pot_sigma * 1e-6 * c_light / meter_by_mev if pot_sigma is not None else self.sigma
         self.pion_rate = self.pion_rate if pion_rate is not None else self.pion_rate
         self.sampling_size = sampling_size if sampling_size is not None else self.sampling_size
-        self._generate()
+        self.simulate()
 
     def fint(self, er, m):
         if np.isscalar(m):
@@ -1133,8 +1151,9 @@ class DMFluxFromPi0Decay(FluxBaseContinuous):
     z direction is the direction of the beam
     """
     def __init__(self, pi0_distribution, dark_photon_mass, coupling_quark, dark_matter_mass, life_time=None,
-                 detector_distance=19.3, detector_direction=0, detector_width=0.1, pot_rate=5e20, pot_mu=0.7, pot_sigma=0.15,
-                 pion_rate=52935/500000, nbins=50):
+                 detector_distance=19.3, detector_direction=0, detector_width=0.1, pot_rate=5e20, pot_mu=0.7,
+                 pot_sigma=0.15, pion_rate=52935/500000, nbins=20):
+        self.pi0_distribution = pi0_distribution
         self.dp_m = dark_photon_mass
         self.life_time = self.get_lifetime(coupling_quark, dark_photon_mass)
         if life_time is not None:
@@ -1150,9 +1169,10 @@ class DMFluxFromPi0Decay(FluxBaseContinuous):
         self.pion_rate = pion_rate
         self.time = []
         self.energy = []
+        self.nbins = nbins
         self.dm_mass = dark_matter_mass
         for pi0_events in pi0_distribution:  # must be in the form [azimuth, cos(zenith), kinetic energy]
-            self._simulate_dm_events(pi0_events)
+            self._generate_single(pi0_events)
         self.timing = np.array(self.time)*1e6
         hist, bin_edges = np.histogram(self.energy, bins=nbins, density=True)
         super().__init__((bin_edges[:-1]+bin_edges[1:])/2, hist,
@@ -1162,8 +1182,18 @@ class DMFluxFromPi0Decay(FluxBaseContinuous):
     
     def get_lifetime(self, g, m):
         return ((16 * np.pi ** 2) / ((g ** 2) * m)) * mev_per_hz
+    
+    def simulate(self):
+        for pi0_events in self.pi0_distribution:  # must be in the form [azimuth, cos(zenith), kinetic energy]
+            self._generate_single(pi0_events)
+        self.timing = np.array(self.time)*1e6
+        hist, bin_edges = np.histogram(self.energy, bins=self.nbins, density=True)
+        norm = self.epsilon**2 * self.pot_rate * self.pion_rate * \
+            len(self.time)/len(self.pi0_distribution)/ \
+                (2*np.pi*(min(1.0, self.det_direc+self.det_width/2)-max(-1.0, self.det_direc-self.det_width/2))*self.det_dist**2*24*3600)*(meter_by_mev**2)
+        super().__init__((bin_edges[:-1]+bin_edges[1:])/2, hist, norm=norm)
 
-    def _simulate_dm_events(self, pi0_events):
+    def _generate_single(self, pi0_events):
         if self.dp_m > massofpi0:
             return
         pos = np.zeros(3)
