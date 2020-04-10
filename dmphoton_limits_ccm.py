@@ -52,8 +52,8 @@ def efficiency(pe):
 
 # Set up energy and timing bins
 hi_energy_cut = 0.08  # mev
-lo_energy_cut = 0.05  # mev
-hi_timing_cut = 0.1
+lo_energy_cut = 0.02  # mev
+hi_timing_cut = 0.4
 lo_timing_cut = 0.0
 energy_edges = np.arange(lo_energy_cut, hi_energy_cut, 0.005) # energy resolution ~2keV
 energy_bins = (energy_edges[:-1] + energy_edges[1:]) / 2
@@ -106,20 +106,33 @@ pion_azimuth = np.arccos(Pi0Info[:,3] / np.sqrt(Pi0Info[:,1]**2 + Pi0Info[:,2]**
 pion_cos = np.cos(np.pi/180 * Pi0Info[:,0])
 pion_flux = np.array([pion_azimuth, pion_cos, pion_energy])
 pion_flux = pion_flux.transpose()
-def GetDMEvents(g, m_dp, m_chi, m_med):
-    dm_gen = DmEventsGen(dark_photon_mass=m_dp, dark_matter_mass=m_chi,
+dm_gen = DmEventsGen(dark_photon_mass=75, dark_matter_mass=25,
                          life_time=0.001, expo=exposure, detector_type='ar')
-    brem_flux = DMFluxIsoPhoton(brem_photons, dark_photon_mass=m_dp, coupling=1,
-                                dark_matter_mass=m_chi, pot_sample=1e5, pot_mu=pot_mu,
-                                pot_sigma=pot_sigma, sampling_size=1000, life_time=0.0001,
-                                detector_distance=dist, brem_suppress=True, verbose=False)
-    pim_flux = DMFluxFromPiMinusAbsorption(dark_photon_mass=m_dp, coupling_quark=1,
-                                           dark_matter_mass=m_chi, pion_rate=pim_rate,
-                                           life_time=0.0001, pot_mu=pot_mu, pot_sigma=pot_sigma,
-                                           detector_distance=dist)
-    pi0_flux = DMFluxFromPi0Decay(pi0_distribution=pion_flux, dark_photon_mass=m_dp, coupling_quark=1,
-                                  dark_matter_mass=m_chi, pot_mu=pot_mu, pot_sigma=pot_sigma,
-                                  life_time=0.0001, detector_distance=dist)
+brem_flux = DMFluxIsoPhoton(brem_photons, dark_photon_mass=75, coupling=1,
+                            dark_matter_mass=25, pot_sample=1e5, pot_mu=pot_mu,
+                            pot_sigma=pot_sigma, sampling_size=1000, life_time=0.0001,
+                            detector_distance=dist, brem_suppress=True, verbose=False)
+pim_flux = DMFluxFromPiMinusAbsorption(dark_photon_mass=75, coupling_quark=1,
+                                       dark_matter_mass=25, pion_rate=pim_rate,
+                                       life_time=0.0001, pot_mu=pot_mu, pot_sigma=pot_sigma,
+                                       detector_distance=dist)
+pi0_flux = DMFluxFromPi0Decay(pi0_distribution=pion_flux, dark_photon_mass=75, coupling_quark=1,
+                              dark_matter_mass=25, pot_mu=pot_mu, pot_sigma=pot_sigma,
+                              life_time=0.0001, detector_distance=dist)
+def GetDMEvents(g, m_dp, m_chi, m_med):
+    dm_gen.dp_mass = m_med
+    dm_gen.dm_mass = m_chi
+    
+    brem_flux.dp_m = m_dp
+    brem_flux.dm_m = m_chi
+    pim_flux.dp_m = m_dp
+    pim_flux.dm_m = m_chi
+    pi0_flux.dp_m = m_dp
+    pi0_flux.dm_m = m_chi
+    
+    brem_flux.simulate()
+    pim_flux.simulate()
+    pi0_flux.simulate()
     
     dm_gen.fx = brem_flux
     brem_events = dm_gen.events(m_med, g, energy_edges, timing_edges,
@@ -145,20 +158,20 @@ def SimpleChi2(sig, bkg):
 
 
 def main():
-    mlist = np.logspace(1, np.log10(400), 5)
+    mlist = np.logspace(0, np.log10(500), 7)
     eplist = np.ones_like(mlist)
     tmp = np.logspace(-20, 0, 20)
 
-    use_save = True
+    use_save = False
     if use_save == True:
         print("using saved data")
-        saved_limits = np.genfromtxt("limits/dark_photon/dark_photon_limits_ccm_tight.txt", delimiter=",")
+        saved_limits = np.genfromtxt("limits/ccm/dark_photon_limits_doublemed_ccm_loose.txt", delimiter=",")
         mlist = saved_limits[:,0]
         eplist = saved_limits[:,1]
     else:
         # Binary search.
         print("Running dark photon limits...")
-        outlist = open("limits/dark_photon/dark_photon_limits_ccm_tight.txt", "w")
+        outlist = open("limits/ccm/dark_photon_limits_doublemed_ccm_loose.txt", "w")
         for i in range(mlist.shape[0]):
             print("Running m_X = ", mlist[i])
             hi = np.log10(tmp[-1])
@@ -166,7 +179,7 @@ def main():
             while hi - lo > 0.05:
                 mid = (hi + lo) / 2
                 print("------- trying g = ", 10**mid)
-                lg = SimpleChi2(GetDMEvents(10**mid, mlist[i], 4.9, mlist[i]), n_nu)
+                lg = SimpleChi2(GetDMEvents(10**mid, 75, 25, mlist[i]), n_nu)
                 print("lg = ", lg)
                 if lg < 6.18:
                     lo = mid
@@ -177,7 +190,6 @@ def main():
             outlist.write(",")
             outlist.write(str(10**mid))
             outlist.write("\n")
-            print(mid)
 
         outlist.close()
 
@@ -228,7 +240,7 @@ def main():
     plt.ylabel(r"$(\epsilon^\chi)^2$", fontsize=13)
     plt.xlabel(r"$M_{A^\prime}$ [MeV]", fontsize=13)
     plt.tight_layout()
-    plt.savefig("plots/dark_photon/dark_photon_limits_ccm.png")
+    #plt.savefig("plots/dark_photon/dark_photon_limits_ccm.png")
     plt.show()
 
 

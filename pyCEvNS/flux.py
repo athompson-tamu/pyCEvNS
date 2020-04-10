@@ -822,6 +822,11 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
         return wgt
 
     def simulate(self):
+        self.time = []
+        self.dm_time = []
+        self.dp_time = []
+        self.energy = []
+        self.weight = []
         for photon_events in self.photon_flux:
             if self.verbose:
                 print("getting photons from E =", photon_events[0], "Size =", photon_events[1])
@@ -1184,6 +1189,8 @@ class DMFluxFromPi0Decay(FluxBaseContinuous):
         return ((16 * np.pi ** 2) / ((g ** 2) * m)) * mev_per_hz
     
     def simulate(self):
+        self.time = []
+        self.energy = []
         for pi0_events in self.pi0_distribution:  # must be in the form [azimuth, cos(zenith), kinetic energy]
             self._generate_single(pi0_events)
         self.timing = np.array(self.time)*1e6

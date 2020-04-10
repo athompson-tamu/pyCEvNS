@@ -257,7 +257,7 @@ def SimpleChi2(sig, bkg):
     likelihood = (sig)**2 / np.sqrt(bkg**2 + 1)
     return np.sum(likelihood)
 
-mlist = np.logspace(0, np.log10(400), 7)
+mlist = np.logspace(0, np.log10(500), 7)
 eplist = np.ones_like(mlist)
 tmp = np.logspace(-20, 0, 20)
 
