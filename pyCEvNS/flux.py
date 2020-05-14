@@ -388,7 +388,7 @@ class NeutrinoFluxFactory:
     def __init__(self):
         self.flux_list = ['solar', 'solar_b8', 'solar_f17', 'solar_hep', 'solar_n13', 'solar_o15', 'solar_pp',
                           'solar_pep', 'solar_be7', 'coherent', 'coherent_prompt', 'coherent_delayed',
-                          'far_beam_nu', 'far_beam_nubar', 'atmospheric','jsns_prompt', 'jsns_delayed',]
+                          'far_beam_nu', 'far_beam_nubar', 'atmospheric','jsns_prompt', 'jsns_delayed', 'jsns_prompt_continuous']
 
     def print_available(self):
         print(self.flux_list)
@@ -466,7 +466,9 @@ class NeutrinoFluxFactory:
             edges = np.arange(0, 302, 2) # energy bin edges
             ev = (edges[:-1] + edges[1:]) / 2
             return NeutrinoFlux(continuous_fluxes={'ev': ev, 'e': nuePDF(ev), 'mubar': nubarmuPDF(ev)}, norm=3 * (10 ** 7))
-        if flux_name == 'jsns_prompt':
+        if flux_name == 'jsns_prompt':  
+            return NeutrinoFlux(delta_fluxes={'mu': [(29, 1),(236, 0.013)]}, norm=1.85 * (10 ** 7))
+        if flux_name == 'jsns_prompt_continuous':
             nu_mu = np.genfromtxt(pkg_resources.resource_filename(__name__, "data/jsns2/jsns_nu_mu_nodelta.txt"), delimiter=',')
             norm_nu_mu = quad(self.interp_flux, 0, 300, args=(nu_mu,))[0]
             
@@ -476,7 +478,8 @@ class NeutrinoFluxFactory:
             edges = np.arange(0, 302, 2) # energy bin edges
             ev = (edges[:-1] + edges[1:]) / 2
             
-            return NeutrinoFlux(delta_fluxes={'mu': [(29, 1),(236, 0.013)]}, norm=1.85 * (10 ** 7))
+            return NeutrinoFlux(continuous_fluxes={'ev': ev, 'mu': numuPDF(ev)},
+                                norm=1.85 * (10 ** 4))
         if flux_name == 'far_beam_nu':
             far_beam_txt = 'data/dune_beam_fd_nu_flux_120GeVoptimized.txt'
             f_beam = np.genfromtxt(pkg_resources.resource_filename(__name__, far_beam_txt), delimiter=',')

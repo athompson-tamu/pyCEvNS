@@ -2,9 +2,35 @@ from .constants import *
 from .helper import *
 
 
+
+# Define form factors
+def _nuclear_ff(t, m, z, a):
+    # t: MeV
+    # m: nucleus mass
+    # z: atomic number
+    # a: number of nucleons
+    return (2*m*z**2) / (1 + t / 164000*np.power(a, -2/3))**2
+
+def _atomic_elastic_ff(t, m, z):
+    # t: MeV
+    # m: nucleus mass
+    # z: atomic number
+    b = 184*np.power(2.718, -1/2)*np.power(z, -1/3) / me
+    return (z*t*b**2)**2 / (1 + t*b**2)**2
+
+def _atomic_elastic_ff(t, m, z):
+    # t: MeV
+    # m: nucleus mass
+    # z: atomic number
+    b = 1194*np.power(2.718, -1/2)*np.power(z, -2/3) / me
+    return (z*t*b**2)**2 / (1 + t*b**2)**2
+
+
+
+# Directional axion production and detection
 class Axion:
-    def __init__(self, photon_rates, axion_mass, axion_coupling, target_mass, target_z, target_photon_cross,
-                 detector_distance, min_decay_length):
+    def __init__(self, photon_rates, axion_mass, axion_coupling, target_mass, target_z,
+                 target_photon_cross, detector_distance, detector_length):
         self.photon_rates = photon_rates # per second
         self.axion_mass = axion_mass # MeV
         self.axion_coupling = axion_coupling # MeV^-1
@@ -12,7 +38,7 @@ class Axion:
         self.target_z = target_z
         self.target_photon_cross = target_photon_cross # cm^2
         self.detector_distance = detector_distance # meter
-        self.min_decay_length = min_decay_length
+        self.detector_length = detector_length
         self.photon_energy = []
         self.photon_weight = []
         self.axion_energy = []
@@ -29,9 +55,10 @@ class Axion:
 
     def primakoff_production_xs(self, z, a):
         me = 0.511
-        prefactor = (1/137) * self.axion_coupling**2 / 4
-        return prefactor * ((z**2) * (np.log(184 * np.power(z, -1/3)) + np.log(403 * np.power(a,-1/3) / me))
-                            + z * np.log(1194 * np.power(z, -2/3)))
+        prefactor = (1 / 137 / 4) * (self.axion_coupling ** 2)
+        return prefactor * ((z ** 2) * (np.log(184 * np.power(z, -1 / 3)) \
+               + np.log(403 * np.power(a, -1 / 3) / me)) \
+               + z * np.log(1194 * np.power(z, -2 / 3)))
 
     def primakoff_scattering_xs(self, energy, z):
         if energy < self.axion_mass:
@@ -56,12 +83,6 @@ class Axion:
         it = 1/(ma**2*pgamma**2-pgamma**4)+(ma**2-2*pgamma**2)*np.arctanh(2*pgamma*np.sqrt(-ma**2+pgamma**2)/(ma**2-2*pgamma**2))/(2*pgamma**3*(-ma**2+pgamma**2)**1.5)
         return 1/4*self.axion_coupling**2*1/137*self.target_z**2*(pgamma**2-self.axion_mass**2)**2*it*self.form_factor()
 
-    def axion_probability(self, pgamma):
-        # target_n_gamma is in cm^2
-        # assuming that target is thick enough and photon cross section is large enough that all photon is converted / absorbed
-        cross_prim = self.photon_axion_cross(pgamma)
-        return cross_prim / (cross_prim + (self.target_photon_cross/(100*meter_by_mev)**2))
-
     def simulate_single(self, energy, rate, nsamplings=1000):
         if energy <= 1.5*self.axion_mass:# or np.abs(2*pgamma*np.sqrt(-ma**2+pgamma**2)/(ma**2-2*pgamma**2))>=1:
             return
@@ -85,7 +106,7 @@ class Axion:
             pos = np.array([0, 0, r])
             # If axion decays outside detector sphere, see if either 1 or both photons make it
             # backward boosted to the detector
-            if r > self.detector_distance / meter_by_mev:
+            if r > (self.detector_distance + self.detector_length) / meter_by_mev:
                 threshold = np.sqrt(r**2 - (self.detector_distance / meter_by_mev)**2) / r
                 cs1 = np.sum(-photon1_momentum[1:] * pos) / np.sqrt(np.sum(photon1_momentum[1:] ** 2) * r ** 2)
                 cs2 = np.sum(-photon2_momentum[1:] * pos) / np.sqrt(np.sum(photon2_momentum[1:] ** 2) * r ** 2)
@@ -95,7 +116,7 @@ class Axion:
                 if cs2 >= threshold:
                     self.photon_energy.append(photon2_momentum[0])
                     self.photon_weight.append(rate * prob / nsamplings)
-            elif r > self.min_decay_length / meter_by_mev:  # else if we are inside, guarantee flux to the det
+            elif r > self.detector_distance / meter_by_mev:  # else if we are inside, guarantee flux to the det
                 self.photon_energy.append(photon1_momentum[0])
                 self.photon_weight.append(rate*prob/nsamplings)
                 self.photon_energy.append(photon2_momentum[0])
@@ -148,8 +169,8 @@ class Axion:
 
 
 class MinerAxionPhoton:
-  def __init__(self, photon_rates, axion_mass, axion_coupling, target_mass, target_z, target_photon_cross,
-               detector_distance, min_decay_length):
+  def __init__(self, photon_rates, axion_mass, axion_coupling, target_mass, target_z,
+               target_photon_cross, detector_distance, detector_length):
     self.photon_rates = photon_rates  # per second
     self.axion_mass = axion_mass  # MeV
     self.axion_coupling = axion_coupling  # MeV^-1
@@ -157,8 +178,12 @@ class MinerAxionPhoton:
     self.target_z = target_z
     self.target_photon_cross = target_photon_cross  # cm^2
     self.detector_distance = detector_distance  # meter
-    self.min_decay_length = min_decay_length
+    self.detector_back = detector_length + detector_distance
+    self.detector_length = detector_length
     self.photon_energy = []
+    self.axion_velocity = []
+    self.axion_decay_prob = []
+    self.axion_surv_prob = []
     self.photon_weight = []
     self.axion_energy = []
     self.axion_weight = []
@@ -171,11 +196,12 @@ class MinerAxionPhoton:
   def primakoff_production_xs(self, z, a):
     me = 0.511
     prefactor = (1 / 137 / 4) * (self.axion_coupling ** 2)
-    return prefactor * ((z ** 2) * (np.log(184 * np.power(z, -1 / 3)) + np.log(403 * np.power(a, -1 / 3) / me))
-                        + z * np.log(1194 * np.power(z, -2 / 3)))
+    return prefactor * ((z ** 2) * (np.log(184 * np.power(z, -1 / 3)) \
+           + np.log(403 * np.power(a, -1 / 3) / me)) \
+           + z * np.log(1194 * np.power(z, -2 / 3)))
 
   def primakoff_scattering_xs(self, energy, z):
-    if energy < 1.5 * self.axion_mass:
+    if energy < self.axion_mass:
       return 0
 
     beta = np.sqrt(energy ** 2 - self.axion_mass ** 2) / energy
@@ -185,30 +211,13 @@ class MinerAxionPhoton:
 
   def branching_ratio(self):
     cross_prim = self.primakoff_production_xs(self.target_z, 2 * self.target_z)
-    #print(cross_prim, self.target_photon_cross / (100 * meter_by_mev) ** 2)
-    return cross_prim / (cross_prim + (self.target_photon_cross / (100 * meter_by_mev) ** 2))
-
-  # Primakoff cross-section for axion production
-  def photon_axion_cross(self, pgamma):
-    ma = self.axion_mass
-    it = 1 / (ma ** 2 * pgamma ** 2 - pgamma ** 4) + (ma ** 2 - 2 * pgamma ** 2) * np.arctanh(
-      2 * pgamma * np.sqrt(-ma ** 2 + pgamma ** 2) / (ma ** 2 - 2 * pgamma ** 2)) / (
-               2 * pgamma ** 3 * (-ma ** 2 + pgamma ** 2) ** 1.5)
-    return 1 / 4 * self.axion_coupling ** 2 * 1 / 137 * self.target_z ** 2 * (
-          pgamma ** 2 - self.axion_mass ** 2) ** 2 * it * self.form_factor()
-
-  # probability of axion production through primakoff
-  def axion_probability(self, pgamma):
-    # target_n_gamma is in cm^2
-    # assuming that target is thick enough and photon cross section is large enough that all photon is converted / absorbed
-    cross_prim = self.photon_axion_cross(pgamma)
     return cross_prim / (cross_prim + (self.target_photon_cross / (100 * meter_by_mev) ** 2))
 
   # Calculate axion and photon populations.
   # get axion production from primakoff process, surviving population after decay probability to gamma gamma
   # Get photon population from a -> gamma gamma decay by convolving Primakoff photon loss with Axion to photon production
   def simulate_single(self, energy, rate):
-    if energy < 1.5 * self.axion_mass \
+    if energy < self.axion_mass \
         or np.abs(2*energy*np.sqrt(-self.axion_mass**2+energy**2)/(self.axion_mass**2-2*energy**2))>=1:
       return
     prob = self.branching_ratio()
@@ -217,15 +226,19 @@ class MinerAxionPhoton:
     axion_boost = energy / self.axion_mass
     tau = 64 * np.pi / (self.axion_coupling ** 2 * self.axion_mass ** 3) * axion_boost  # lifetime for a -> gamma gamma
     decay_length = meter_by_mev * axion_v * tau
-    decay_prob =  1 - np.exp(-self.detector_distance / meter_by_mev / axion_v / tau) \
-      if self.detector_distance / decay_length < 100 else 1
-    decay_past_shielding = np.exp(-self.min_decay_length / meter_by_mev / axion_v / tau) \
-                           - np.exp(-self.detector_distance / meter_by_mev / axion_v / tau)
+    lg_surv_prob =  -self.detector_distance / meter_by_mev / axion_v / tau
+    decay_in_detector = 1 - np.exp(-self.detector_length / meter_by_mev / axion_v / tau)
+    self.axion_velocity.append(axion_v)
+    self.axion_surv_prob.append(np.exp(lg_surv_prob))
+    self.axion_decay_prob.append(decay_in_detector)
     self.photon_energy.append(energy)
-    self.photon_weight.append(rate * prob * decay_past_shielding
-                                / (4 * np.pi * (self.detector_distance - self.min_decay_length) ** 2))
+    lg_wgt = np.log(rate) + np.log(prob) \
+             + lg_surv_prob \
+             + np.log(decay_in_detector) \
+             - np.log(4 * np.pi * (self.detector_distance) ** 2)
+    self.photon_weight.append(np.exp(lg_wgt))
     self.axion_energy.append(energy)
-    self.axion_weight.append((1 - decay_prob) * rate * prob)
+    self.axion_weight.append(np.exp(lg_surv_prob) * rate * prob)
 
   # Loops over photon flux and fills the photon and axion energy arrays.
   def simulate(self):
@@ -233,6 +246,9 @@ class MinerAxionPhoton:
     self.photon_weight = []
     self.axion_energy = []
     self.axion_weight = []
+    self.axion_velocity = []
+    self.axion_decay_prob = []
+    self.axion_surv_prob = []
     for f in self.photon_rates:
       self.simulate_single(f[0], f[1])
 
@@ -253,7 +269,7 @@ class MinerAxionPhoton:
 
   def photon_events_binned(self, detector_area, detection_time, threshold):
     res = np.zeros(len(self.photon_weight))
-    scale = detection_time * detector_area / (4 * np.pi * self.detector_distance ** 2)
+    scale = detection_time * detector_area
     for i in range(len(self.photon_energy)):
       if self.photon_energy[i] >= threshold:
         res[i] = self.photon_weight[i]
@@ -271,7 +287,7 @@ class MinerAxionPhoton:
 
 class MinerAxionElectron:
     def __init__(self, photon_rates, axion_mass, axion_coupling, target_mass, target_z, target_photon_cross,
-               detector_distance, min_decay_length):
+                 detector_distance, detector_length):
         self.photon_rates = photon_rates  # per second
         self.axion_mass = axion_mass  # MeV
         self.axion_coupling = axion_coupling  # MeV^-1
@@ -279,11 +295,13 @@ class MinerAxionElectron:
         self.target_z = target_z
         self.target_photon_cross = target_photon_cross  # cm^2
         self.detector_distance = detector_distance  # meter
-        self.min_decay_length = min_decay_length
+        self.detector_length = detector_length
         self.photon_energy = []
         self.photon_weight = []
         self.axion_energy = []
         self.axion_weight = []
+        self.epem_energy = []
+        self.epem_weight = []
         self.electron_energy = []
         self.electron_weight = []
         self.axion_prod_cross = []
@@ -319,9 +337,12 @@ class MinerAxionElectron:
         for i in range(ne - 1):
             # Get BR for axion production.
             axion_prob = dde[i] * self.target_z / (dde[i] + (self.target_photon_cross / (100 * meter_by_mev) ** 2))
+            surv_prob = self.AxionSurvProb(axion_energies[i])
             decay_prob = self.AxionDecayProb(axion_energies[i])
             self.axion_energy.append(axion_energies[i])
-            self.axion_weight.append((1 - decay_prob) * rate * axion_prob * (dde[i] / cross_prod))
+            self.axion_weight.append(surv_prob * rate * axion_prob * (dde[i] / cross_prod))
+            self.epem_energy.append(axion_energies[i])
+            self.epem_weight.append(decay_prob * rate * axion_prob * (dde[i] / cross_prod))
             self.axion_prod_cross.append(cross_prod)
             self.axion_scatter_cross.append(cross_scatter[i])
 
@@ -371,13 +392,31 @@ class MinerAxionElectron:
                              * np.power(1 - 4 * (me / self.axion_mass) ** 2, 1 / 2)) \
               if 1 - 4 * (me / self.axion_mass) ** 2 > 0 else np.inf  # lifetime for a -> gamma gamma
         tau *= axion_boost
-        return 1 - np.exp(-self.detector_distance / meter_by_mev / axion_v / tau)
+        return np.exp(-self.detector_distance / meter_by_mev / axion_v / tau) \
+               * (1 - np.exp(-self.detector_length / meter_by_mev / axion_v / tau))
+    
+    def AxionSurvProb(self, ea):
+        # Decay the axions in flight to e+ e-.
+        # Returns probability that it will decay inside the detector volume.
+        axion_p = np.sqrt(ea ** 2 - self.axion_mass ** 2)
+        axion_v = axion_p / ea
+        axion_boost = ea / self.axion_mass
+        tau = (8 * np.pi) / (self.axion_coupling ** 2 * self.axion_mass
+                             * np.power(1 - 4 * (me / self.axion_mass) ** 2, 1 / 2)) \
+              if 1 - 4 * (me / self.axion_mass) ** 2 > 0 else np.inf  # lifetime for a -> gamma gamma
+        tau *= axion_boost
+        return np.exp(-self.detector_distance / meter_by_mev / axion_v / tau)
 
     def simulate(self, nsamplings=1000):
         self.photon_energy = []
         self.photon_weight = []
         self.axion_energy = []
         self.axion_weight = []
+        self.electron_energy = []
+        self.electron_weight = []
+        self.axion_prod_cross = []
+        self.epem_energy = []
+        self.epem_weight = []
         for f in self.photon_rates:
           self.simulate_single(f[0], f[1])
 
@@ -447,6 +486,6 @@ class MinerAxionElectron:
     def pair_production_events(self, detector_area, detection_time, threshold):
         res = 0
         for i in range(len(self.electron_energy)):
-            if self.electron_energy[i] >= threshold:
-                res += self.electron_weight[i]
+            if self.axion_energy[i] >= threshold:
+                res += self.epem_weight[i]
         return res * detection_time * detector_area / (4 * np.pi * self.detector_distance ** 2)

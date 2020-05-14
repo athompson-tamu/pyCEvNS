@@ -25,7 +25,8 @@ class CrediblePlot:
             raise Exception("Invalid file!")
 
     def credible_1d(self, idx: int, credible_level=(0.6827, 0.9545), nbins=80, ax=None,
-                    give_max=False, label='', smooth=False, countour=True, give_edge=False):
+                    give_max=False, label='', smooth=False, countour=True, give_edge=False,
+                    color='b', ls='-', flip_axes=False, lwidth=2):
         """
         plot binned parameter v.s. its probability on the bin
         :param idx: which parameter should be plotted? index starts from 0
@@ -39,6 +40,7 @@ class CrediblePlot:
         :param give_edge: print edge of the contour
         :return: figure and axes object for further fine tuning the plot
         """
+        contour = True
         if ax is not None:
             fig = None
         else:
@@ -57,10 +59,13 @@ class CrediblePlot:
         cl = np.sort(credible_level)[::-1]
         if smooth:
             countour = False
-            by = signal.savgol_filter(biny, 21, 2)
-            ax.plot(binx, by/binw, label=label)
+            by = signal.savgol_filter(biny, 5, 2)
+            if flip_axes:
+                ax.plot(by / binw, binx, label=label, color=color, ls=ls, linewidth=lwidth) # 6 for grid, 2 for 1d
+            else:
+                ax.plot(binx, by/binw, label=label, color=color, ls=ls, linewidth=lwidth)
         else:
-            ax.bar(binx, biny, label=label, width=binw, alpha=0.5)
+            ax.bar(binx, biny, label=label, width=binw, alpha=0.5, color=color)
         if give_max:
             print(binx[np.argmax(biny)])
         sorted_idx = np.argsort(biny)[::-1]
@@ -76,7 +81,7 @@ class CrediblePlot:
                     cxl.append(binx[i])
                     if s > cl[ic]:
                         break
-                ax.bar(cxl, cyl, width=binw, alpha=al[ic], color='b')
+                ax.bar(cxl, cyl, width=binw, alpha=al[ic], color=color)
                 if give_edge:
                     print(cl[ic], '-->', np.sort(cxl))
         xleft, xright = ax.get_xlim()
@@ -159,7 +164,8 @@ class CrediblePlot:
         ax.set_aspect(abs((xright - xleft) / (ybottom - ytop)))
         return fig, ax
 
-    def credible_grid(self, idx: tuple, names=None, credible_level=(0.6827, 0.9545), nbins=80):
+    def credible_grid(self, idx: tuple, test_point: tuple, names=None,
+                      credible_level=(0.6827, 0.9545), nbins=80, color="b"):
         """
         n by n grid of plots where diagonal plots are parameters vs probability,
         off diagonal plots are the correlation between any of the two
@@ -178,15 +184,26 @@ class CrediblePlot:
                 axes[i][j] = fig.add_subplot(grid[i, j])
                 ax = axes[i][j]
                 if i == j:
-                    self.credible_1d(i, credible_level, nbins, ax)
+                    flip = True
+                    if i==0:
+                        flip = False
+                    self.credible_1d(i, credible_level, nbins, ax, color=color, flip_axes=flip)
                     if names is not None:
-                        ax.set_xlabel(names[i])
-                        ax.set_ylabel('p')
+                        ax.tick_params(labelsize=25)
+                        if flip == False:
+                            ax.set_ylabel('p', fontsize=35)
+                        else:
+                            ax.set_ylabel('p', fontsize=35)
+                            #ax.xaxis.set_label_position('top')
+                            #ax.xaxis.tick_top()
                 else:
-                    self.credible_2d((i, j), credible_level, nbins, ax)
-                    if names is not None:
-                        ax.set_xlabel(names[i])
-                        ax.set_ylabel(names[j])
+                    self.credible_2d((j, i), credible_level, nbins, ax, color=color)
+                    plt.plot(test_point[j], test_point[i], marker="*", c='r', markersize='20')
+                    ax.tick_params(labelsize=25)
+                    if names is not None and i==lth-1:
+                        ax.set_xlabel(names[j], fontsize=35)
+                    if names is not None and j==0:
+                        ax.set_ylabel(names[i], fontsize=35)
         fig.tight_layout()
         return fig, axes
 
