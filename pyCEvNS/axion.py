@@ -1,6 +1,7 @@
 from .constants import *
 from .helper import *
 
+from numpy import log, log10, pi
 
 
 # Define form factors
@@ -90,7 +91,7 @@ class Axion:
         axion_p = np.sqrt(energy ** 2 - self.axion_mass ** 2)
         axion_v = min(axion_p / energy, 0.99999999999)
         axion_boost = energy / self.axion_mass
-        tau = 64 * np.pi / (self.axion_coupling ** 2 * self.axion_mass ** 3) * axion_boost  # lifetime
+        tau = 64 * pi / (self.axion_coupling ** 2 * self.axion_mass ** 3) * axion_boost  # lifetime
         decay_length = meter_by_mev * axion_v * tau
         decay_prob = 1 - np.exp(-self.detector_distance / meter_by_mev / axion_v / tau) \
             if self.detector_distance / decay_length < 100 else 1
@@ -137,11 +138,11 @@ class Axion:
         for i in range(len(self.photon_energy)):
             if self.photon_energy[i] >= threshold:
                 res += self.photon_weight[i]
-        return res * detection_time * detector_area / (4*np.pi*self.detector_distance**2)
+        return res * detection_time * detector_area / (4*pi*self.detector_distance**2)
 
     def photon_events_binned(self, detector_area, detection_time, threshold):
         decay_photon_weight = []
-        exposure = detection_time * detector_area / (4*np.pi*self.detector_distance**2)
+        exposure = detection_time * detector_area / (4*pi*self.detector_distance**2)
         for i in range(len(self.photon_energy)):
             if self.photon_energy[i] >= threshold:
                 decay_photon_weight.append(self.photon_weight[i] * exposure)
@@ -150,7 +151,7 @@ class Axion:
     def scatter_events(self, detector_number, detector_z, detection_time, threshold):
         res = 0
         exposure = meter_by_mev**2 * detection_time * detector_number \
-                   / (4 * np.pi * self.detector_distance ** 2)
+                   / (4 * pi * self.detector_distance ** 2)
         for i in range(len(self.axion_energy)):
             if self.axion_energy[i] >= threshold:
                 res += self.axion_weight[i] * self.primakoff_scattering_xs(self.axion_energy[i], detector_z)
@@ -159,7 +160,7 @@ class Axion:
     def scatter_events_binned(self, detector_number, detector_z, detection_time, threshold):
         scatter_photon_weight = []
         exposure = meter_by_mev**2 * detection_time * detector_number \
-                   / (4 * np.pi * self.detector_distance ** 2)
+                   / (4 * pi * self.detector_distance ** 2)
         for i in range(len(self.axion_energy)):
             if self.axion_energy[i] >= threshold:
                 scatter_photon_weight.append(exposure * self.axion_weight[i]
@@ -168,7 +169,7 @@ class Axion:
 
 
 
-class MinerAxionPhoton:
+class IsotropicAxionFromPrimakoff:
   def __init__(self, photon_rates, axion_mass, axion_coupling, target_mass, target_z,
                target_photon_cross, detector_distance, detector_length):
     self.photon_rates = photon_rates  # per second
@@ -181,9 +182,6 @@ class MinerAxionPhoton:
     self.detector_back = detector_length + detector_distance
     self.detector_length = detector_length
     self.photon_energy = []
-    self.axion_velocity = []
-    self.axion_decay_prob = []
-    self.axion_surv_prob = []
     self.photon_weight = []
     self.axion_energy = []
     self.axion_weight = []
@@ -213,32 +211,24 @@ class MinerAxionPhoton:
     cross_prim = self.primakoff_production_xs(self.target_z, 2 * self.target_z)
     return cross_prim / (cross_prim + (self.target_photon_cross / (100 * meter_by_mev) ** 2))
 
-  # Calculate axion and photon populations.
-  # get axion production from primakoff process, surviving population after decay probability to gamma gamma
-  # Get photon population from a -> gamma gamma decay by convolving Primakoff photon loss with Axion to photon production
+  # Convolute axion production and decay rates with a photon flux
   def simulate_single(self, energy, rate):
-    if energy < self.axion_mass \
-        or np.abs(2*energy*np.sqrt(-self.axion_mass**2+energy**2)/(self.axion_mass**2-2*energy**2))>=1:
-      return
     prob = self.branching_ratio()
     axion_p = np.sqrt(energy ** 2 - self.axion_mass ** 2)
     axion_v = axion_p / energy
     axion_boost = energy / self.axion_mass
-    tau = 64 * np.pi / (self.axion_coupling ** 2 * self.axion_mass ** 3) * axion_boost  # lifetime for a -> gamma gamma
+    tau = 64 * pi / (self.axion_coupling ** 2 * self.axion_mass ** 3) * axion_boost
     decay_length = meter_by_mev * axion_v * tau
     lg_surv_prob =  -self.detector_distance / meter_by_mev / axion_v / tau
     decay_in_detector = 1 - np.exp(-self.detector_length / meter_by_mev / axion_v / tau)
-    self.axion_velocity.append(axion_v)
-    self.axion_surv_prob.append(np.exp(lg_surv_prob))
-    self.axion_decay_prob.append(decay_in_detector)
-    self.photon_energy.append(energy)
     lg_wgt = np.log(rate) + np.log(prob) \
              + lg_surv_prob \
              + np.log(decay_in_detector) \
-             - np.log(4 * np.pi * (self.detector_distance) ** 2)
+             - np.log(4 * pi * (self.detector_distance) ** 2)
+    self.photon_energy.append(energy)
     self.photon_weight.append(np.exp(lg_wgt))
     self.axion_energy.append(energy)
-    self.axion_weight.append(np.exp(lg_surv_prob) * rate * prob)
+    self.axion_weight.append(np.exp(lg_surv_prob) * rate * prob / (4*pi*self.detector_distance ** 2))
 
   # Loops over photon flux and fills the photon and axion energy arrays.
   def simulate(self):
@@ -246,9 +236,6 @@ class MinerAxionPhoton:
     self.photon_weight = []
     self.axion_energy = []
     self.axion_weight = []
-    self.axion_velocity = []
-    self.axion_decay_prob = []
-    self.axion_surv_prob = []
     for f in self.photon_rates:
       self.simulate_single(f[0], f[1])
 
@@ -263,9 +250,9 @@ class MinerAxionPhoton:
     res = 0
     for i in range(len(self.axion_energy)):
       if self.axion_energy[i] >= threshold:
-        res += self.axion_weight[i] * self.primakoff_scattering_xs(self.axion_energy[i], detector_z)
-    return res * meter_by_mev ** 2 * detection_time * detector_number / (
-          4 * np.pi * self.detector_distance ** 2)
+        res += self.axion_weight[i] * self.primakoff_scattering_xs(self.axion_energy[i], detector_z) \
+               * detection_time * detector_number * meter_by_mev ** 2
+    return res 
 
   def photon_events_binned(self, detector_area, detection_time, threshold):
     res = np.zeros(len(self.photon_weight))
@@ -279,15 +266,15 @@ class MinerAxionPhoton:
     res = np.zeros(len(self.axion_weight))
     for i in range(len(self.axion_energy)):
       if self.axion_energy[i] >= threshold:
-        res[i] = self.axion_weight[i] * self.primakoff_scattering_xs(self.axion_energy[i], detector_z)
-    return res * meter_by_mev ** 2 * detection_time * detector_number / (
-          4 * np.pi * self.detector_distance ** 2)
+        res[i] = self.axion_weight[i] * self.primakoff_scattering_xs(self.axion_energy[i], detector_z) \
+                 * detection_time * detector_number * meter_by_mev ** 2
+    return res 
 
 
 
-class MinerAxionElectron:
-    def __init__(self, photon_rates, axion_mass, axion_coupling, target_mass, target_z, target_photon_cross,
-                 detector_distance, detector_length):
+class IsotropicAxionFromCompton:
+    def __init__(self, photon_rates, axion_mass, axion_coupling, target_mass, target_z,
+                 target_photon_cross, detector_distance, detector_length):
         self.photon_rates = photon_rates  # per second
         self.axion_mass = axion_mass  # MeV
         self.axion_coupling = axion_coupling  # MeV^-1
@@ -304,7 +291,6 @@ class MinerAxionElectron:
         self.epem_weight = []
         self.electron_energy = []
         self.electron_weight = []
-        self.axion_prod_cross = []
         self.axion_scatter_cross = []
         self.simulate(1)
 
@@ -315,11 +301,8 @@ class MinerAxionElectron:
     def simulate_single(self, eg, rate):
         s = 2 * me * eg + me ** 2
         a = 1 / 137
-        aa = self.axion_coupling ** 2 / 4 / np.pi
+        aa = self.axion_coupling ** 2 / 4 / pi
         ma = self.axion_mass
-        if np.sqrt(s) < me + ma:
-            #print("sqrt(s) < me + ma ; Egamma = ", eg, " MeV")
-            return
 
         ne = 50
         axion_energies = np.linspace(ma, eg, ne) # version 2
@@ -329,34 +312,30 @@ class MinerAxionElectron:
         cross_prod = np.sum(dde)
         cross_scatter = self.AxionElectronScatteringXS(axion_energies)
         if np.any(dde) < 0:
-            #print("negative xs")
             return
-
 
         # Both photons and axions decrease with decay_prob, since we assume e+e- does not make it to the detector.
         for i in range(ne - 1):
-            # Get BR for axion production.
             axion_prob = dde[i] * self.target_z / (dde[i] + (self.target_photon_cross / (100 * meter_by_mev) ** 2))
             surv_prob = self.AxionSurvProb(axion_energies[i])
             decay_prob = self.AxionDecayProb(axion_energies[i])
             self.axion_energy.append(axion_energies[i])
-            self.axion_weight.append(surv_prob * rate * axion_prob * (dde[i] / cross_prod))
+            self.axion_weight.append(surv_prob * rate * axion_prob * (dde[i] / cross_prod) / (4 * pi * self.detector_distance ** 2))
             self.epem_energy.append(axion_energies[i])
-            self.epem_weight.append(decay_prob * rate * axion_prob * (dde[i] / cross_prod))
-            self.axion_prod_cross.append(cross_prod)
+            self.epem_weight.append(decay_prob * rate * axion_prob * (dde[i] / cross_prod) / (4 * pi * self.detector_distance ** 2))
             self.axion_scatter_cross.append(cross_scatter[i])
 
     def AxionElectronHighEnergyDiffXS(self, ea, et):
         a = 1 / 137
-        aa = self.axion_coupling ** 2 / 4 / np.pi
-        prefact = a * aa * np.pi / 2 / me
+        aa = self.axion_coupling ** 2 / 4 / pi
+        prefact = a * aa * pi / 2 / me
         sigma = prefact * (et ** 2) / ((et ** 3) * (ea - et))
         return sigma
 
     def AxionElectronScatteringXS(self, ea):
         a = 1 / 137
-        aa = self.axion_coupling ** 2 / 4 / np.pi
-        prefact = a * aa * np.pi / 2 / me / ea**2
+        aa = self.axion_coupling ** 2 / 4 / pi
+        prefact = a * aa * pi / 2 / me / ea**2
         sigma = prefact * 2 * ea * (-(2*ea * (3*ea + me)/(2 * ea + me)**2) + np.log(2 * ea / me + 1))
         return sigma
 
@@ -368,18 +347,19 @@ class MinerAxionElectron:
         prefact = (1/137) * self.axion_coupling ** 2 / (4 * me ** 2)
         pa = np.sqrt(ea ** 2 - self.axion_mass ** 2)
         eg = ea - et
-        # Overall minus sign from using dSigma/dEt rather than dSigma/dEgamma
         return -(prefact / pa) * (1 - (8 * me * eg / y) + (12 * (me * eg / y) ** 2)
                                   - (32 * me * (pa * self.axion_mass) ** 2) * eg / (3 * y ** 3))
 
     def AxionProductionXS(self, ea, eg):
         # Differential cross-section dS/dE_a. gamma + e > a + e.
         a = 1 / 137
-        aa = self.axion_coupling ** 2 / 4 / np.pi
+        aa = self.axion_coupling ** 2 / 4 / pi
         ma = self.axion_mass
         s = 2 * me * eg + me ** 2
+        if np.sqrt(s) < me + ma:
+            return 0
         x = (ma**2 / (2*eg*me)) - ea / eg + 1
-        return (1 / eg) * np.pi * a * aa / (s - me ** 2) * (x / (1 - x) * (-2 * ma ** 2 / (s - me ** 2) ** 2
+        return (1 / eg) * pi * a * aa / (s - me ** 2) * (x / (1 - x) * (-2 * ma ** 2 / (s - me ** 2) ** 2
                                                                  * (s - me ** 2 / (1 - x) - ma ** 2 / x) + x))
 
     def AxionDecayProb(self, ea):
@@ -388,7 +368,7 @@ class MinerAxionElectron:
         axion_p = np.sqrt(ea ** 2 - self.axion_mass ** 2)
         axion_v = axion_p / ea
         axion_boost = ea / self.axion_mass
-        tau = (8 * np.pi) / (self.axion_coupling ** 2 * self.axion_mass
+        tau = (8 * pi) / (self.axion_coupling ** 2 * self.axion_mass
                              * np.power(1 - 4 * (me / self.axion_mass) ** 2, 1 / 2)) \
               if 1 - 4 * (me / self.axion_mass) ** 2 > 0 else np.inf  # lifetime for a -> gamma gamma
         tau *= axion_boost
@@ -401,7 +381,7 @@ class MinerAxionElectron:
         axion_p = np.sqrt(ea ** 2 - self.axion_mass ** 2)
         axion_v = axion_p / ea
         axion_boost = ea / self.axion_mass
-        tau = (8 * np.pi) / (self.axion_coupling ** 2 * self.axion_mass
+        tau = (8 * pi) / (self.axion_coupling ** 2 * self.axion_mass
                              * np.power(1 - 4 * (me / self.axion_mass) ** 2, 1 / 2)) \
               if 1 - 4 * (me / self.axion_mass) ** 2 > 0 else np.inf  # lifetime for a -> gamma gamma
         tau *= axion_boost
@@ -414,7 +394,6 @@ class MinerAxionElectron:
         self.axion_weight = []
         self.electron_energy = []
         self.electron_weight = []
-        self.axion_prod_cross = []
         self.epem_energy = []
         self.epem_weight = []
         for f in self.photon_rates:
@@ -425,7 +404,7 @@ class MinerAxionElectron:
         for i in range(len(self.photon_energy)):
           if self.photon_energy[i] >= threshold:
             res += self.photon_weight[i]
-        return res * detection_time * detector_area / (4 * np.pi * self.detector_distance ** 2)
+        return res * detection_time * detector_area
 
     def electron_events_binned(self, nbins, detector_number, detector_z, detection_time, threshold):
         self.electron_energy = []
@@ -441,12 +420,9 @@ class MinerAxionElectron:
             # Get differential scattering rate
             dSigma_dEt = self.AxionElectronHighEnergyDiffXS(self.axion_energy[i], Et)
             if np.any(dSigma_dEt < 0):
-                #print("negative a + e > gamma + e xs")
-                #print(dSigma_dEt)
                 continue
 
             sigma = np.sum(dSigma_dEt) * delta_Et  # total cross-section
-
 
             # Fill in electrons..
             for j in range(Et.shape[0]-1): # Integrate over E_t
@@ -455,15 +431,13 @@ class MinerAxionElectron:
                 if Et[j] > Et_max:
                     continue
 
-                axion_flux = self.axion_weight[i] / (4 * np.pi * self.detector_distance ** 2)
-                scatter_rate = axion_flux * (dSigma_dEt[j] / sigma) * self.axion_scatter_cross[i] * delta_Et
+                scatter_rate = self.axion_weight[i] * (dSigma_dEt[j] / sigma) * self.axion_scatter_cross[i] * delta_Et
                 exposure = meter_by_mev ** 2 * detection_time * detector_number * detector_z
                 self.electron_weight.append(scatter_rate * exposure)
                 self.electron_energy.append(Et[j])
                 self.photon_weight.append(scatter_rate * exposure)
                 self.photon_energy.append(self.axion_energy[i]-Et[j])
 
-        # normalize photon spectra to the electron spectra; they come in the same amount.
         return np.sum(self.electron_weight), np.sum(self.photon_weight)
 
 
@@ -472,20 +446,18 @@ class MinerAxionElectron:
         for i in range(len(self.axion_energy)):
             if self.axion_energy[i] >= threshold:
                 res += self.axion_weight[i] * self.axion_scatter_cross[i]  # approx scatter_xs = prod_xs
-        return res * meter_by_mev ** 2 * detection_time * detector_number \
-               / (4 * np.pi * self.detector_distance ** 2) * detector_z
+        return res * meter_by_mev ** 2 * detection_time * detector_number * detector_z
 
     def scatter_events_binned(self, detector_number, detector_z, detection_time, threshold):
         res = np.zeros(len(self.axion_weight))
         for i in range(len(self.axion_energy)):
             if self.axion_energy[i] >= threshold:
                 res[i] = self.axion_weight[i] * self.axion_scatter_cross[i]  # approx scatter_xs = prod_xs
-        return res * meter_by_mev ** 2 * detection_time * detector_number \
-               / (4 * np.pi * self.detector_distance ** 2) * detector_z
+        return res * meter_by_mev ** 2 * detection_time * detector_number * detector_z
 
     def pair_production_events(self, detector_area, detection_time, threshold):
         res = 0
         for i in range(len(self.electron_energy)):
             if self.axion_energy[i] >= threshold:
                 res += self.epem_weight[i]
-        return res * detection_time * detector_area / (4 * np.pi * self.detector_distance ** 2)
+        return res * detection_time * detector_area
