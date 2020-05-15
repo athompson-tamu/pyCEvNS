@@ -30,7 +30,7 @@ def main(mn_dir, filename, nbins=40, cl=(0.6827,0.6827)):
   fig, ax = cp.credible_2d((0,1), credible_level=cl, nbins=nbins)
   plt.xlabel(r"$\log_{10} m_V$", fontsize=20)
   plt.ylabel(r"$\log_{10} Y$", fontsize=20)
-  #plt.title(r"COHERENT CsI - $m_X = 75$ MeV, $m_\chi = 5$ MeV")
+  plt.title(r"COHERENT CsI, $m_X = 75$ MeV, $m_\chi = 25$ MeV", loc="right")
   #plt.xscale('log')
   #plt.yscale('log')
   plt.show()

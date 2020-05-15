@@ -2,6 +2,11 @@
 
 This package provides convenient methods for calculting neutrino experiment events and fitting new physics parameter.
 
+## Requirements
+* scipy
+* numpy
+* pandas
+
 ## Basic usage
 
 import ingredient:

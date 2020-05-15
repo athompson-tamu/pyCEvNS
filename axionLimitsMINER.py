@@ -4,6 +4,8 @@ from scipy.integrate import quad
 from scipy.interpolate import UnivariateSpline
 from scipy import signal
 
+from pyCEvNS.axion import IsotropicAxionFromPrimakoff
+
 from matplotlib.pylab import rc
 import matplotlib.ticker as tickr
 
@@ -53,28 +55,8 @@ class MinerEstimate:
     #print(cross_prim, self.target_photon_cross / (100 * meter_by_mev) ** 2)
     return cross_prim / (cross_prim + (self.target_photon_cross / (100 * meter_by_mev) ** 2))
 
-  # Primakoff cross-section for axion production
-  #def photon_axion_cross(self, pgamma):
-   # ma = self.axion_mass
-    #it = 1 / (ma ** 2 * pgamma ** 2 - pgamma ** 4) + (ma ** 2 - 2 * pgamma ** 2) * np.arctanh(
-     # 2 * pgamma * np.sqrt(-ma ** 2 + pgamma ** 2) / (ma ** 2 - 2 * pgamma ** 2)) / (
-      #         2 * pgamma ** 3 * (-ma ** 2 + pgamma ** 2) ** 1.5)
-    #return 1 / 4 * self.axion_coupling ** 2 * 1 / 137 * self.target_z ** 2 * (
-     #     pgamma ** 2 - self.axion_mass ** 2) ** 2 * it * self.form_factor()
-
-  # probability of axion production through primakoff
-  #def axion_probability(self, pgamma):
-    # target_n_gamma is in cm^2
-    # assuming that target is thick enough and photon cross section is large enough that all photon is converted / absorbed
-   # cross_prim = self.photon_axion_cross(pgamma)
-    #return cross_prim / (cross_prim + (self.target_photon_cross / (100 * meter_by_mev) ** 2))
-
-  # Calculate axion and photon populations.
-  # get axion production from primakoff process, surviving population after decay probability to gamma gamma
-  # Get photon population from a -> gamma gamma decay by convolving Primakoff photon loss with Axion to photon production
   def simulate_single(self, energy, rate):
-    if energy < 1.5 * self.axion_mass \
-        or np.abs(2*energy*np.sqrt(-self.axion_mass**2+energy**2)/(self.axion_mass**2-2*energy**2))>=1:
+    if energy < self.axion_mass:
       return
     prob = self.branching_ratio()
     axion_p = np.sqrt(energy ** 2 - self.axion_mass ** 2)
@@ -131,38 +113,26 @@ class MinerEstimate:
           4 * np.pi * self.detector_distance ** 2)
 
 
-
-# Read in data.
-coherent = np.genfromtxt('data/photon_flux_COHERENT_log_binned.txt')
-# COHERENT flux used 100,000 POT (1e-11 s equivalent)
-miner = np.genfromtxt('data/reactor_photon.txt')
-beam = np.genfromtxt('data/beam.txt')
-eeinva = np.genfromtxt('data/eeinva.txt')
-lep = np.genfromtxt('data/lep.txt')
-lsw = np.genfromtxt('data/lsw.txt')
-nomad = np.genfromtxt('data/nomad.txt')
-# Astrophyiscal limits
-cast = np.genfromtxt("data/cast.txt", delimiter=",")
-hbstars = np.genfromtxt("data/hbstars.txt", delimiter=",")
-sn1987a_upper = np.genfromtxt("data/sn1987a_upper.txt", delimiter=",")
-sn1987a_lower = np.genfromtxt("data/sn1987a_lower.txt", delimiter=",")
-
-# Declare constants.
-# conversion between units
+# Declare global constants.
 hbar = 6.58212e-22  # MeV*s
 c_light = 2.998e8  # m/s
 meter_by_mev = hbar * c_light  # MeV*m
 mev_per_kg = 5.6095887e29  # MeV/kg
 s_per_day = 3600*24
 
+# Flux
+miner = np.genfromtxt('data/miner/reactor_photon.txt')
+miner[:,1] *= 100000000  # factor to get flux at the core
+mw_flux = miner
+gw_flux = miner
+gw_flux[:,1] *= 3900 # convert MW reactor to GW
 
-miner[:, 1] *= 100000000
-flux = miner
 
-mass_array = np.logspace(-6, 2, 300)  # Mass array to test
-
-def BinarySearch(detector):
-    print("Running ", detector)
+# Given an axion flux generator and detector information, scans over the m_a grid
+# and performs a binary search at each m_a value to find the solution of g_a\gamma\gamma
+# that satisfies the Poisson test-statistic (2 sigma limit)
+def BinarySearch(flux, detector, mass_grid, save_file, sig_limit):
+    print("--- Running ", detector)
     if detector == "ge":
         # Ge
         det_dis = 2.25
@@ -172,7 +142,6 @@ def BinarySearch(detector):
         days = 1000
         det_area = 0.2 ** 2
         det_thresh = 1e-3
-        dru_limit = 0.1
         bkg_dru = 100
     if detector == "csi":
         det_dis = 2.5
@@ -182,7 +151,6 @@ def BinarySearch(detector):
         days = 1000
         det_area = (0.4) ** 2
         det_thresh = 2.6
-        dru_limit = 0.01
         bkg_dru = 100
     if detector == "csi_2ton":
         det_dis = 2.5
@@ -192,7 +160,6 @@ def BinarySearch(detector):
         days = 1000
         det_area = 4*(0.4) ** 2
         det_thresh = 2.6
-        dru_limit = 0.01
         bkg_dru = 100
     if detector == "connie":
         det_dis = 30
@@ -202,7 +169,6 @@ def BinarySearch(detector):
         days = 1000
         det_area = 4*0.0036
         det_thresh = 0.028e-3
-        dru_limit = 0.01
         bkg_dru = 700
     if detector == "conus":
         det_dis = 17
@@ -212,7 +178,6 @@ def BinarySearch(detector):
         days = 1000
         det_area = 0.2 ** 2
         det_thresh = 1e-3
-        dru_limit = 0.01
         bkg_dru = 100
     if detector == "nucleus":
         det_dis = 40
@@ -222,126 +187,148 @@ def BinarySearch(detector):
         days = 1000
         det_area = 0.005 ** 2
         det_thresh = 0.02e-3
-        dru_limit = 0.01
         bkg_dru = 100
 
-    sig_limit = 2
     bkg = bkg_dru * days * det_mass * 5  # DRU within 0-5 keVnr
+    upper_array = np.ones_like(mass_grid)  # Coupling array to test upper bound
+    lower_array = np.ones_like(mass_grid)  # Coupling array to test lower bound
+    
+    #generator.detector_distance = det_dis
+    #generator.min_decay_length = 0.9*det_dis
+    #generator.photon_rates = flux
+    axion_gen = IsotropicAxionFromPrimakoff(photon_rates=mw_flux, axion_mass=1, axion_coupling=1e-6, target_mass=240e3,
+                                            target_z=90, target_photon_cross=15e-24, detector_distance=det_dis,
+                                            detector_length=np.sqrt(det_area))
+    #axion_gen = MinerEstimate(flux, 1, 1e-6, 240e3, 90, 15e-24, det_dis, 0.9*det_dis)
 
-    coupling_array = np.zeros_like(mass_array)  # Coupling array to test
-
-    photon_gen = MinerEstimate(flux, 1, 1e-6, 240e3, 90, 15e-24, det_dis, 0.2)
-    # Axion decay regime
-    for i in range(mass_array.shape[0]):
+    # Begin the scan
+    for i in range(mass_grid.shape[0]):
         lo = -12
         hi = -1
-        photon_gen.axion_mass = mass_array[i]
-        print("trying ma = ", mass_array[i])
-        while hi - lo > 0.001:
+        axion_gen.axion_mass = mass_grid[i]
+        print("Evaluating likelihood at m_a = ", mass_grid[i])
+        # lower bound
+        while hi - lo > 0.002:
             mid = (hi+lo)/2
-            photon_gen.axion_coupling = 10**mid
-            photon_gen.simulate()
-            ev = photon_gen.photon_events(det_area, days, det_thresh) * s_per_day
-            ev += photon_gen.scatter_events(det_mass * mev_per_kg / det_am, det_z, days, det_thresh) * s_per_day
+            axion_gen.axion_coupling = 10**mid
+            axion_gen.simulate()
+            ev = axion_gen.photon_events(det_area, days*s_per_day, det_thresh)
+            ev += axion_gen.scatter_events(det_mass * mev_per_kg / det_am, det_z, days*s_per_day, det_thresh)
             sig = ev / np.sqrt(ev + bkg)
-            print("sig = ", sig)
-            print("ev,bkg = ", ev, bkg)
             if sig < sig_limit:
                 lo = mid
             else:
                 hi = mid
-        coupling_array[i] = 10**mid
+        lower_array[i] = 10**mid
+        print(10**mid)
+        lo = -12
+        hi = -1
+        # upper bound
+        while hi - lo > 0.002:
+            mid = (hi+lo)/2
+            axion_gen.axion_coupling = 10**mid
+            axion_gen.simulate()
+            ev = axion_gen.photon_events(det_area, days*s_per_day, det_thresh)
+            ev += axion_gen.scatter_events(det_mass * mev_per_kg / det_am, det_z, days*s_per_day, det_thresh)
+            sig = ev / np.sqrt(ev + bkg)
+            if sig > sig_limit:
+                lo = mid
+            else:
+                hi = mid
+        upper_array[i] = 10**mid
+        print(10**mid)
+
+    save_array = np.array([mass_grid, lower_array, upper_array])
+    np.savetxt(save_file, save_array)
+    return save_array
+
+
+def main():  
+    #axion_gen = IsotropicAxionFromPrimakoff(photon_rates=mw_flux, axion_mass=1, axion_coupling=1e-6, target_mass=240e3,
+     #                                       target_z=90, target_photon_cross=15e-24, detector_distance=2.25,
+      #                                      detector_length=0.2)
+    #axion_gen = MinerEstimate(mw_flux, 1, 1e-6, 240e3, 90, 15e-24, 2.25, 0.2)
+    mass_array = np.logspace(-6, 1, 100)
+    rerun = True
+    if rerun == True:
+        limits_miner = BinarySearch(mw_flux, "ge", mass_array, "limits/miner_photon/ge.txt", 2)
+        limits_connie = BinarySearch(gw_flux, "connie", mass_array, "limits/miner_photon/connie_repro.txt", 2)
+        limits_conus = BinarySearch(gw_flux, "conus", mass_array, "limits/miner_photon/conus_repro.txt", 2)
+        limits_nucleus = BinarySearch(gw_flux, "nucleus", mass_array, "limits/miner_photon/nucleus_repro.txt", 2)
+
+    else:
+        limits_miner = np.genfromtxt("limits/miner_photon/ge.txt")
+        limits_connie = np.genfromtxt("limits/miner_photon/connie.txt")
+        limits_conus = np.genfromtxt("limits/miner_photon/conus.txt")
+        limits_nucleus = np.genfromtxt("limits/miner_photon/nucleus.txt")
+
+    # Existing limits
+    beam = np.genfromtxt('data/existing_limits/beam.txt')
+    eeinva = np.genfromtxt('data/existing_limits/eeinva.txt')
+    lep = np.genfromtxt('data/existing_limits/lep.txt')
+    lsw = np.genfromtxt('data/existing_limits/lsw.txt')
+    nomad = np.genfromtxt('data/existing_limits/nomad.txt')
+    
+    # Astrophyiscal limits
+    cast = np.genfromtxt("data/existing_limits/cast.txt", delimiter=",")
+    hbstars = np.genfromtxt("data/existing_limits/hbstars.txt", delimiter=",")
+    sn1987a_upper = np.genfromtxt("data/existing_limits/sn1987a_upper.txt", delimiter=",")
+    sn1987a_lower = np.genfromtxt("data/existing_limits/sn1987a_lower.txt", delimiter=",")
+    
+    # Plot derived limits (lower bound)
+    plt.plot(limits_miner[0]*1e6, limits_miner[1]*1e3, color="crimson", label='MINER Ge (4 kg)')
+    plt.plot(limits_nucleus[0]*1e6, limits_nucleus[1]*1e3, color="navy", ls='dashed', label=r'NUCLEUS CaWO$_4$(Al$_2$O$_3$) (0.01 kg)')
+    plt.plot(limits_connie[0]*1e6, limits_connie[1]*1e3, color="orange",ls='dashdot',label='CONNIE Si Skipper CCD (0.1 kg)')
+    plt.plot(limits_conus[0]*1e6, limits_conus[1]*1e3, color="teal",ls='dotted', label='CONUS Ge PPC (4 kg)')
+    
+    # Plot derived limits (upper bound)
+    plt.plot(limits_miner[0]*1e6, limits_miner[2]*1e3, color="crimson")
+    plt.plot(limits_nucleus[0]*1e6, limits_nucleus[2]*1e3, color="navy", ls='dashed')
+    plt.plot(limits_connie[0]*1e6, limits_connie[2]*1e3, color="orange",ls='dashdot')
+    plt.plot(limits_conus[0]*1e6, limits_conus[2]*1e3, color="teal",ls='dotted')
+
+    # Plot astrophysical limits
+    astro_alpha = 0.1
+    plt.fill(hbstars[:,0]*1e9, hbstars[:,1]*0.367e-3, color="mediumpurple", alpha=astro_alpha)
+    plt.fill(cast[:,0]*1e9, cast[:,1]*0.367e-3, color="orchid", alpha=astro_alpha)
+    plt.fill_between(sn1987a_lower[:,0]*1e9, y1=sn1987a_lower[:,1]*0.367e-3, y2=sn1987a_upper[:,1]*0.367e-3, color="darkgoldenrod", alpha=astro_alpha)
+
+    # Plot lab limits
+    lab_alpha=0.9
+    plt.fill(beam[:,0], beam[:,1], color="b", alpha=lab_alpha)
+    plt.fill(np.hstack((eeinva[:,0], np.min(eeinva[:,0]))), np.hstack((eeinva[:,1], np.max(eeinva[:,1]))),
+            color="orange", alpha=lab_alpha)
+    plt.fill(lep[:,0], lep[:,1], color="green", alpha=lab_alpha)
+    plt.fill(np.hstack((nomad[:,0], np.min(nomad[:,0]))), np.hstack((nomad[:,1], np.max(nomad[:,1]))),
+            color="yellow", alpha=lab_alpha)
+
+
+    # Draw text for existing backgrounds
+    text_fs = 16
+    plt.text(300,5e-6,'HB Stars', rotation=0, fontsize=text_fs, color="k", weight="bold")
+    plt.text(1,6e-6,'CAST', rotation=0, fontsize=text_fs, color="k", weight="bold")
+    plt.text(10000,8e-7,'SN1987a', rotation=0, fontsize=text_fs, color="k", weight="bold")
+    plt.text(1e5,1e-4,'Beam Dump', rotation=0, fontsize=text_fs, color="white", weight="bold")
+    plt.text(1e4,1e-3,r'$e^+e^-\rightarrow inv.+\gamma$', rotation=0, fontsize=text_fs, color="white", weight="bold")
+    plt.text(1e7,1e-1,'LEP', rotation=0, fontsize=text_fs, color="white", weight="bold")
+    plt.text(5,1e-3,'NOMAD', rotation=0, fontsize=text_fs, color="k", weight="bold")
+
+    plt.legend(loc="upper left", framealpha=1, fontsize=12)
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.xticks(fontsize=18)
+    plt.yticks(fontsize=18)
+    plt.xlim(1,5e7)
+    plt.ylim(3e-7,1)
+    plt.xlabel('$m_a$ [eV]', fontsize=24)
+    plt.ylabel('$g_{a\gamma\gamma}$ [GeV$^{-1}$]', fontsize=24)
+    plt.tight_layout()
 
 
 
-
-    if detector == "ge":
-      np.savetxt("limits/miner_photon/ge.txt", coupling_array)
-    if detector == "csi":
-      np.savetxt("limits/miner_photon/csi.txt", coupling_array)
-    if detector == "csi_2ton":
-      np.savetxt("limits/miner_photon/csi_2ton.txt", coupling_array)
-    if detector == "connie":
-      np.savetxt("limits/miner_photon/connie.txt", coupling_array)
-    if detector == "conus":
-      np.savetxt("limits/miner_photon/conus.txt", coupling_array)
-    if detector == "nucleus":
-      np.savetxt("limits/miner_photon/nucleus.txt", coupling_array)
-
-    return coupling_array
-
-rerun = False
-if rerun == True:
-  coup_array_1 = BinarySearch("ge")
-  flux[:,1] *= 3900
-  coup_array_4 = BinarySearch("connie")
-  coup_array_5 = BinarySearch("conus")
-  coup_array_6 = BinarySearch("nucleus")
-
-else:
-  coup_array_1 = np.genfromtxt("limits/miner_photon/ge.txt")
-  #coup_array_2 = np.genfromtxt("limits/miner_photon/csi.txt")
-  #coup_array_3 = np.genfromtxt("limits/miner_photon/csi_2ton.txt")
-  coup_array_4 = np.genfromtxt("limits/miner_photon/connie.txt")
-  coup_array_5 = np.genfromtxt("limits/miner_photon/conus.txt")
-  coup_array_6 = np.genfromtxt("limits/miner_photon/nucleus.txt")
+    plt.tick_params(axis='x', which='minor')
+    plt.show()
 
 
-
-
-
-
-
-plt.plot(mass_array*1e6, coup_array_1*1e3, color="crimson", label='MINER Ge (4 kg)')
-plt.plot(mass_array*1e6, coup_array_6*1e3, color="navy", ls='dashed', label=r'NUCLEUS CaWO$_4$(Al$_2$O$_3$) (0.01 kg)')
-plt.plot(mass_array*1e6, coup_array_4*1e3, color="orange",ls='dashdot',label='CONNIE Si Skipper CCD (0.1 kg)')
-plt.plot(mass_array*1e6, coup_array_5*1e3, color="teal",ls='dotted', label='CONUS Ge PPC (4 kg)')
-
-
-
-# Plot astrophysical limits
-astro_alpha = 0.1
-plt.fill(hbstars[:,0]*1e9, hbstars[:,1]*0.367e-3, color="mediumpurple", alpha=astro_alpha)
-plt.fill(cast[:,0]*1e9, cast[:,1]*0.367e-3, color="orchid", alpha=astro_alpha)
-plt.fill_between(sn1987a_lower[:,0]*1e9, y1=sn1987a_lower[:,1]*0.367e-3, y2=sn1987a_upper[:,1]*0.367e-3, color="darkgoldenrod", alpha=astro_alpha)
-
-# Plot existing limits
-lab_alpha=0.9
-plt.fill(beam[:,0], beam[:,1], color="b", alpha=lab_alpha)
-plt.fill(np.hstack((eeinva[:,0], np.min(eeinva[:,0]))), np.hstack((eeinva[:,1], np.max(eeinva[:,1]))),
-         color="orange", alpha=lab_alpha)
-plt.fill(lep[:,0], lep[:,1], color="green", alpha=lab_alpha)
-plt.fill(np.hstack((nomad[:,0], np.min(nomad[:,0]))), np.hstack((nomad[:,1], np.max(nomad[:,1]))),
-         color="yellow", alpha=lab_alpha)
-
-
-# Draw text for existing backgrounds
-text_fs = 16
-plt.text(300,5e-6,'HB Stars', rotation=0, fontsize=text_fs, color="k", weight="bold")
-plt.text(1,6e-6,'CAST', rotation=0, fontsize=text_fs, color="k", weight="bold")
-plt.text(10000,8e-7,'SN1987a', rotation=0, fontsize=text_fs, color="k", weight="bold")
-plt.text(1e5,1e-4,'Beam Dump', rotation=0, fontsize=text_fs, color="white", weight="bold")
-plt.text(1e4,1e-3,r'$e^+e^-\rightarrow inv.+\gamma$', rotation=0, fontsize=text_fs, color="white", weight="bold")
-plt.text(1e7,1e-1,'LEP', rotation=0, fontsize=text_fs, color="white", weight="bold")
-plt.text(5,1e-3,'NOMAD', rotation=0, fontsize=text_fs, color="k", weight="bold")
-
-plt.legend(loc="upper left", framealpha=1, fontsize=12)
-plt.xscale('log')
-plt.yscale('log')
-plt.xticks(fontsize=18)
-plt.yticks(fontsize=18)
-plt.xlim(1,5e7)
-plt.ylim(3e-7,1)
-plt.xlabel('$m_a$ [eV]', fontsize=24)
-plt.ylabel('$g_{a\gamma\gamma}$ [GeV$^{-1}$]', fontsize=24)
-plt.tight_layout()
-
-
-
-plt.tick_params(axis='x', which='minor')
-#plt.savefig('plots/alps_paper/axion_photon_limits_benchmark_x10bkg.pdf')
-#plt.savefig('plots/alps_paper/axion_photon_limits_benchmark_x10bkg.png')
-
-plt.show()
-
-
+if __name__ == "__main__":
+    main()

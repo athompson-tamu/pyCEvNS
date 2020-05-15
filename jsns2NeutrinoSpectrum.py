@@ -132,13 +132,13 @@ def GetDMEvents(m_chi, m_dp, m_med, g, lifetime=0.001):
     
     # First pulse
     dm_gen.fx = brem_flux
-    brem_events = dm_gen.events(m_med, g, energy_edges, timing_edges, channel="electron")
+    brem_events = dm_gen.events(m_med, g, energy_edges, timing_edges, channel="electron")[0]
 
     dm_gen.fx = pim_flux
-    pim_events = dm_gen.events(m_med, g, energy_edges, timing_edges, channel="electron")
+    pim_events = dm_gen.events(m_med, g, energy_edges, timing_edges, channel="electron")[0]
 
     dm_gen.fx = pi0_flux
-    pi0_events = dm_gen.events(m_med, g, energy_edges, timing_edges, channel="electron")
+    pi0_events = dm_gen.events(m_med, g, energy_edges, timing_edges, channel="electron")[0]
     
     # Second pulse
     brem_flux.pot_mu = pot_mu + 0.5
@@ -149,19 +149,21 @@ def GetDMEvents(m_chi, m_dp, m_med, g, lifetime=0.001):
     pi0_flux.simulate()
     
     dm_gen.fx = brem_flux
-    brem_events += dm_gen.events(m_med, g, energy_edges, timing_edges, channel="electron")
+    brem_events += dm_gen.events(m_med, g, energy_edges, timing_edges, channel="electron")[0]
 
     dm_gen.fx = pim_flux
-    pim_events += dm_gen.events(m_med, g, energy_edges, timing_edges, channel="electron")
+    pim_events += dm_gen.events(m_med, g, energy_edges, timing_edges, channel="electron")[0]
 
     dm_gen.fx = pi0_flux
-    pi0_events += dm_gen.events(m_med, g, energy_edges, timing_edges, channel="electron")
+    pi0_events += dm_gen.events(m_med, g, energy_edges, timing_edges, channel="electron")[0]
 
-    return brem_events[0] + pim_events[0] + pi0_events[0]
+    return brem_events + pim_events + pi0_events
 
-dm_events1 = GetDMEvents(m_chi=5, m_dp=75, m_med=25, g=1e-4)
-dm_events2 = GetDMEvents(m_chi=5, m_dp=300, m_med=25, g=1e-4)
-
+#dm_events1 = GetDMEvents(m_chi=5, m_dp=75, m_med=25, g=1e-4)
+#dm_events2 = GetDMEvents(m_chi=5, m_dp=300, m_med=25, g=1e-4)
+dm_events1 = GetDMEvents(m_chi=25, m_dp=75, m_med=25, g=1e-4, lifetime=0.001)
+dm_events2 = GetDMEvents(m_chi=25, m_dp=75, m_med=25, g=2e-4, lifetime=1)
+dm_events3 = GetDMEvents(m_chi=5, m_dp=138, m_med=25, g=2e-4, lifetime=1)
 
 
 
@@ -184,9 +186,7 @@ plt.savefig("plots/jsns2/neutrino_dm_spectra_25e-2mus.png")
 plt.show()
 plt.clf()
 
-dm_events1 = GetDMEvents(m_chi=25, m_dp=75, m_med=25, g=1e-4, lifetime=0.001)
-dm_events2 = GetDMEvents(m_chi=25, m_dp=75, m_med=25, g=2e-4, lifetime=1)
-dm_events3 = GetDMEvents(m_chi=5, m_dp=138, m_med=25, g=2e-4, lifetime=1)
+
 
 print(np.sum(dm_events1), np.sum(dm_events2), np.sum(dm_events3))
 
@@ -196,15 +196,18 @@ plt.hist([flat_times,flat_times], weights=[n_prompt, n_delayed], bins=timing_edg
 plt.hist(flat_times,weights=dm_events1,bins=timing_edges, color='blue',
          histtype='step', density=density, label=r"DM ($M_X = 75$ MeV, $\tau < 0.001$ $\mu$s)")
 plt.hist(flat_times,weights=dm_events2,bins=timing_edges, color='crimson',
-         histtype='step', density=density, label=r"DM ($M_{A^\prime} = 75$ MeV, $\tau = 1$ $\mu$s)")
+         histtype='step', density=density, label=r"DM ($M_X = 75$ MeV, $\tau = 1$ $\mu$s)")
 plt.hist(flat_times,weights=dm_events3,bins=timing_edges, color='darkorange',
-         histtype='step', density=density, label=r"DM ($M_{A^\prime} = 138$ MeV, $\tau = 1$ $\mu$s)")
+         histtype='step', density=density, label=r"DM ($M_X = 138$ MeV, $\tau = 1$ $\mu$s)")
 plt.xlabel(r"$t$ [$\mu$s]", fontsize=15)
 plt.ylabel(r"a.u.", fontsize=15)
 plt.title(r"JSNS$^2$", loc="right", fontsize=15)
-plt.legend(fontsize=13)
+plt.xlim((0,2))
+plt.ylim((0,5))
+plt.legend(fontsize=12)
 plt.xticks(fontsize=13)
 plt.yticks(fontsize=13)
+plt.tight_layout()
 plt.show()
 
 
