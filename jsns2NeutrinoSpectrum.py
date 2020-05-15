@@ -23,7 +23,6 @@ pim_rate_ccm = 0.0259
 pim_rate = pim_rate_jsns
 pot_mu = 0.07
 pot_sigma = 0.04
-det_area_cm2 = 18
 
 prompt_pdf = np.genfromtxt('data/jsns/pion_kaon_neutrino_timing.txt', delimiter=',')
 delayed_pdf = np.genfromtxt('data/jsns/mu_neutrino_timing.txt', delimiter=',')
@@ -73,11 +72,11 @@ def get_energy_bins(e_a, e_b):
 # Set up energy and timing bins
 hi_energy_cut = 300  # mev
 lo_energy_cut = 0.0  # mev
-hi_timing_cut = 0.25
-lo_timing_cut = 0.1
+hi_timing_cut = 2.0
+lo_timing_cut = 0.0
 energy_edges = np.linspace(lo_energy_cut, hi_energy_cut,51) #get_energy_bins(lo_energy_cut, hi_energy_cut)
 energy_bins = (energy_edges[:-1] + energy_edges[1:]) / 2
-timing_edges = np.linspace(lo_timing_cut, hi_timing_cut, 10)
+timing_edges = np.linspace(lo_timing_cut, hi_timing_cut, 51)
 timing_bins = (timing_edges[:-1] + timing_edges[1:]) / 2
 
 n_meas = np.zeros((energy_bins.shape[0] * len(timing_bins), 2))
@@ -120,17 +119,18 @@ n_nu = n_prompt + n_delayed
 
 
 # Plot JSNS^2 Dark Matter Signal
-def GetDMEvents(m_chi, m_dp, m_med, g):
+def GetDMEvents(m_chi, m_dp, m_med, g, lifetime=0.001):
     #eps = np.sqrt(1/137) * g
     dm_gen = DmEventsGen(dark_photon_mass=m_dp, dark_matter_mass=m_chi, life_time=0.001, expo=exposure, detector_type='jsns_scintillator')
     brem_flux = DMFluxIsoPhoton(brem_photons, dark_photon_mass=m_dp, coupling=g, dark_matter_mass=m_chi,
                               detector_distance=24, pot_mu=pot_mu, pot_sigma=pot_sigma, pot_sample=1e5,
-                              sampling_size=1000, brem_suppress=True, verbose=False)
+                              sampling_size=1000, brem_suppress=True, verbose=False, life_time=lifetime)
     pim_flux = DMFluxFromPiMinusAbsorption(dark_photon_mass=m_dp, coupling_quark=g, dark_matter_mass=m_chi, pion_rate=pim_rate,
-                                           pot_mu=pot_mu, pot_sigma=pot_sigma, detector_distance=24)
+                                           pot_mu=pot_mu, pot_sigma=pot_sigma, detector_distance=24, life_time=lifetime)
     pi0_flux = DMFluxFromPi0Decay(pi0_distribution=pion_flux, dark_photon_mass=m_dp, coupling_quark=g, dark_matter_mass=m_chi,
-                                  pot_mu=pot_mu, pot_sigma=pot_sigma, detector_distance=24)
+                                  pot_mu=pot_mu, pot_sigma=pot_sigma, detector_distance=24, life_time=lifetime)
     
+    # First pulse
     dm_gen.fx = brem_flux
     brem_events = dm_gen.events(m_med, g, energy_edges, timing_edges, channel="electron")
 
@@ -139,6 +139,23 @@ def GetDMEvents(m_chi, m_dp, m_med, g):
 
     dm_gen.fx = pi0_flux
     pi0_events = dm_gen.events(m_med, g, energy_edges, timing_edges, channel="electron")
+    
+    # Second pulse
+    brem_flux.pot_mu = pot_mu + 0.5
+    pim_flux.pot_mu = pot_mu + 0.5
+    pi0_flux.pot_mu = pot_mu + 0.5
+    brem_flux.simulate()
+    pim_flux.simulate()
+    pi0_flux.simulate()
+    
+    dm_gen.fx = brem_flux
+    brem_events += dm_gen.events(m_med, g, energy_edges, timing_edges, channel="electron")
+
+    dm_gen.fx = pim_flux
+    pim_events += dm_gen.events(m_med, g, energy_edges, timing_edges, channel="electron")
+
+    dm_gen.fx = pi0_flux
+    pi0_events += dm_gen.events(m_med, g, energy_edges, timing_edges, channel="electron")
 
     return brem_events[0] + pim_events[0] + pi0_events[0]
 
@@ -148,43 +165,11 @@ dm_events2 = GetDMEvents(m_chi=5, m_dp=300, m_med=25, g=1e-4)
 
 
 
-# Plots
-plt.clf()
-plt.plot(timing_bins, prompt_time(timing_bins))
-plt.plot(timing_bins, delayed_time(timing_bins))
-plt.savefig("plots/jsns2/timing.png")
-
-plt.clf()
-plt.hist2d(flat_energies, flat_times, weights=n_nu, bins=[energy_edges, timing_edges])
-plt.xlabel(r"$E_r$ [MeV]")
-plt.ylabel(r"$t$ [$\mu$s]")
-plt.savefig("plots/jsns2/neutrino_energy_spectrum.png")
-
-plt.clf()
-plt.hist2d(flat_energies, flat_times, weights=n_delayed, bins=[energy_edges, timing_edges])
-plt.xlabel(r"$E_r$ [MeV]")
-plt.ylabel(r"$t$ [$\mu$s]")
-plt.savefig("plots/jsns2/delayed_energy_spectrum.png")
-
-plt.clf()
-plt.hist2d(flat_energies, flat_times, weights=n_prompt, bins=[energy_edges, timing_edges])
-plt.xlabel(r"$E_r$ [MeV]")
-plt.ylabel(r"$t$ [$\mu$s]")
-plt.savefig("plots/jsns2/prompt_energy_spectrum.png")
-
-plt.clf()
-plt.hist2d(flat_energies, flat_times, weights=dm_events1, bins=[energy_edges, timing_edges])
-plt.xlabel(r"$E_r$ [MeV]")
-plt.ylabel(r"$t$ [$\mu$s]")
-plt.savefig("plots/jsns2/dm_spectrum_2d_energy_time.png")
-plt.clf()
-
-
 
 # Plot Dark Matter against Neutrino Spectrum
 density = False
 plt.hist([flat_energies,flat_energies], weights=[n_prompt, n_delayed], bins=energy_edges,
-         stacked=True, histtype='stepfilled', density=density, color=['black','dimgray'], label=["Prompt", "Delayed"])
+         stacked=True, histtype='stepfilled', density=density, color=['teal','tan'], label=["Prompt", "Delayed"])
 plt.hist(flat_energies,weights=dm_events1,bins=energy_edges,
          histtype='step', density=density, label=r"DM ($M_{A^\prime} = 75$ MeV)")
 plt.hist(flat_energies,weights=dm_events2,bins=energy_edges,
@@ -199,16 +184,27 @@ plt.savefig("plots/jsns2/neutrino_dm_spectra_25e-2mus.png")
 plt.show()
 plt.clf()
 
+dm_events1 = GetDMEvents(m_chi=25, m_dp=75, m_med=25, g=1e-4, lifetime=0.001)
+dm_events2 = GetDMEvents(m_chi=25, m_dp=75, m_med=25, g=2e-4, lifetime=1)
+dm_events3 = GetDMEvents(m_chi=5, m_dp=138, m_med=25, g=2e-4, lifetime=1)
+
+print(np.sum(dm_events1), np.sum(dm_events2), np.sum(dm_events3))
+
 density = True
 plt.hist([flat_times,flat_times], weights=[n_prompt, n_delayed], bins=timing_edges,
-         stacked=True, histtype='stepfilled', density=density, color=['black','dimgray'], label=["Prompt", "Delayed"])
-plt.hist(flat_times,weights=dm_events1,bins=timing_edges,
-         histtype='step', density=density, label=r"DM ($M_{A^\prime} = 75$ MeV)")
-plt.hist(flat_times,weights=dm_events2,bins=timing_edges,
-         histtype='step', density=density, label=r"DM ($M_{A^\prime} = 300$ MeV)")
-plt.xlabel(r"$t$ [$\mu$s]")
-plt.ylabel(r"Events")
-plt.legend()
+         stacked=True, histtype='stepfilled', density=density, color=['teal','tan'], label=["Prompt", "Delayed"])
+plt.hist(flat_times,weights=dm_events1,bins=timing_edges, color='blue',
+         histtype='step', density=density, label=r"DM ($M_X = 75$ MeV, $\tau < 0.001$ $\mu$s)")
+plt.hist(flat_times,weights=dm_events2,bins=timing_edges, color='crimson',
+         histtype='step', density=density, label=r"DM ($M_{A^\prime} = 75$ MeV, $\tau = 1$ $\mu$s)")
+plt.hist(flat_times,weights=dm_events3,bins=timing_edges, color='darkorange',
+         histtype='step', density=density, label=r"DM ($M_{A^\prime} = 138$ MeV, $\tau = 1$ $\mu$s)")
+plt.xlabel(r"$t$ [$\mu$s]", fontsize=15)
+plt.ylabel(r"a.u.", fontsize=15)
+plt.title(r"JSNS$^2$", loc="right", fontsize=15)
+plt.legend(fontsize=13)
+plt.xticks(fontsize=13)
+plt.yticks(fontsize=13)
 plt.show()
 
 
