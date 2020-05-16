@@ -647,8 +647,8 @@ class DMFlux:
         :param pot_sigma: std of guassian distribution of proton on target, unit in micro second
         :param size: size of sampling dark photons
         """
-        self.dp_mass = dark_photon_mass
-        self.dm_mass = dark_matter_mass
+        self.dp_m = dark_photon_mass
+        self.dm_m = dark_matter_mass
         self.epsi_quark = coupling_quark
         self.det_dist = detector_distance / meter_by_mev
         self.dp_life = life_time * 1e-6 * c_light / meter_by_mev
@@ -666,7 +666,7 @@ class DMFlux:
         :param size: size of sampling dark photons
         :return: time and energy histogram of dark matter
         """
-        dp_m = self.dp_mass
+        dp_m = self.dp_m
         dp_e = ((massofpi+massofp)**2 - massofn**2 + dp_m**2)/(2*(massofpi+massofp))
         dp_p = np.sqrt(dp_e ** 2 - dp_m ** 2)
         dp_v = dp_p / dp_e
@@ -677,7 +677,7 @@ class DMFlux:
         cs = np.random.uniform(-1, 1, size)  # direction of each dark photon
         # in rest frame
         estar = dp_m / 2
-        pstar = np.sqrt(estar ** 2 - self.dm_mass ** 2)
+        pstar = np.sqrt(estar ** 2 - self.dm_m ** 2)
         pstarx = pstar * cs
         pstary = pstar * np.sqrt(1 - cs ** 2)
         # boost to lab frame
@@ -717,10 +717,10 @@ class DMFlux:
         :param kwargs: other argument
         :return: flux/(ex^2-mx^2) integration
         """
-        emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_mass**2+4*m*self.dm_mass**2)/m) + er)
+        emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_m**2+4*m*self.dm_m**2)/m) + er)
 
         def integrand(ex):
-            return self.flux(ex)/(ex**2 - self.dm_mass**2)
+            return self.flux(ex)/(ex**2 - self.dm_m**2)
 
         if not isinstance(emin, np.ndarray):
             res = quad(integrand, emin, self.ed_max)[0]
@@ -738,10 +738,10 @@ class DMFlux:
         :param kwargs: other argument
         :return: flux*ex/(ex^2-mx^2) integration
         """
-        emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_mass**2+4*m*self.dm_mass**2)/m) + er)
+        emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_m**2+4*m*self.dm_m**2)/m) + er)
 
         def integrand(ex):
-            return self.flux(ex) * ex / (ex ** 2 - self.dm_mass ** 2)
+            return self.flux(ex) * ex / (ex ** 2 - self.dm_m ** 2)
 
         if not isinstance(emin, np.ndarray):
             res = quad(integrand, emin, self.ed_max)[0]
@@ -759,10 +759,10 @@ class DMFlux:
         :param kwargs: other argument
         :return: flux*ex^2/(ex^2-mx^2) integration
         """
-        emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_mass**2+4*m*self.dm_mass**2)/m) + er)
+        emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_m**2+4*m*self.dm_m**2)/m) + er)
 
         def integrand(ex):
-            return self.flux(ex) * ex**2 / (ex ** 2 - self.dm_mass ** 2)
+            return self.flux(ex) * ex**2 / (ex ** 2 - self.dm_m ** 2)
 
         if not isinstance(emin, np.ndarray):
             res = quad(integrand, emin, self.ed_max)[0]
@@ -995,8 +995,7 @@ class DMFluxFromPiMinusAbsorption:
         :param pion_rate: pi^- production rate
         :param sampling_size: size of sampling dark photons
         """
-        self.dp_mass = dark_photon_mass
-        self.dm_mass = dark_matter_mass
+        self.dp_m = dark_photon_mass
         self.dm_m = dark_matter_mass
         self.epsi_quark = coupling_quark
         self.det_dist = detector_distance / meter_by_mev
@@ -1027,9 +1026,9 @@ class DMFluxFromPiMinusAbsorption:
         generate dark matter flux
         """
         # First check that the dp mass is less than the pi- mass.
-        if self.dp_mass > massofpi:
+        if self.dp_m > massofpi:
             return
-        dp_m = self.dp_mass
+        dp_m = self.dp_m
         dp_e = ((massofpi + massofp) ** 2 - massofn ** 2 + dp_m ** 2) / (2 * (massofpi + massofp))
         dp_p = np.sqrt(dp_e ** 2 - dp_m ** 2)
         dp_v = dp_p / dp_e
@@ -1042,7 +1041,7 @@ class DMFluxFromPiMinusAbsorption:
         cs = np.random.uniform(-1, 1, self.sampling_size)  # direction of each dark photon
         # in rest frame
         estar = dp_m / 2
-        pstar = np.sqrt(estar ** 2 - self.dm_mass ** 2)
+        pstar = np.sqrt(estar ** 2 - self.dm_m ** 2)
         pstarx = pstar * cs
         pstary = pstar * np.sqrt(1 - cs ** 2)
         # boost to lab frame
@@ -1106,10 +1105,10 @@ class DMFluxFromPiMinusAbsorption:
 
     def change_parameters(self, dark_photon_mass=None, life_time=None, coupling_quark=None, dark_matter_mass=None,
                           detector_distance=None, pot_rate=None, pot_mu=None, pot_sigma=None, pion_rate=None, sampling_size=None):
-        self.dp_mass = dark_photon_mass if dark_photon_mass is not None else self.dp_mass
+        self.dp_m = dark_photon_mass if dark_photon_mass is not None else self.dp_m
         self.dp_life = life_time * 1e-6 * c_light / meter_by_mev if life_time is not None else self.dp_life
         self.epsi_quark = coupling_quark if coupling_quark is not None else self.epsi_quark
-        self.dm_mass = dark_matter_mass if dark_matter_mass is not None else self.dm_mass
+        self.dm_m = dark_matter_mass if dark_matter_mass is not None else self.dm_m
         self.det_dist = detector_distance / meter_by_mev if detector_distance is not None else self.det_dist
         self.pot_rate = pot_rate if pot_rate is not None else self.pot_rate
         self.pot_mu = pot_mu * 1e-6 * c_light / meter_by_mev if pot_mu is not None else self.pot_mu
@@ -1180,7 +1179,7 @@ class DMFluxFromPi0Decay(FluxBaseContinuous):
         self.time = []
         self.energy = []
         self.nbins = nbins
-        self.dm_mass = dark_matter_mass
+        self.dm_m = dark_matter_mass
         for pi0_events in pi0_distribution:  # must be in the form [azimuth, cos(zenith), kinetic energy]
             self._generate_single(pi0_events)
         self.timing = np.array(self.time)*1e6
