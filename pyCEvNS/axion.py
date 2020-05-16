@@ -1,10 +1,30 @@
 from .constants import *
 from .helper import *
 
-from numpy import log, log10, pi
+from numpy import log, log10, pi, exp
+from scipy.special import exp1
+import math
 
 import mpmath as mp
-from mpmath import mpmathify
+from mpmath import mpmathify, fsub, fadd
+mp.dps = 15
+
+def primakoff_production_xs(energy, z, a, ma, g): #Tsai, '86
+    if energy < ma:
+        return 0
+    me = 0.511
+    prefactor = (1 / 137 / 4) * (g ** 2)
+    return prefactor * ((z ** 2) * (np.log(184 * np.power(z, -1 / 3)) \
+        + np.log(403 * np.power(a, -1 / 3) / me)) \
+        + z * np.log(1194 * np.power(z, -2 / 3)))
+
+def primakoff_scattering_xs(energy, z, ma, g):  # Avignone '87
+    if energy < ma:
+        return 0
+    beta = min(np.sqrt(energy ** 2 - ma ** 2) / energy, 0.999999)
+    chi = _screening(energy, ma)
+    prefactor = (1 / 137 / 2) * (g * z) ** 2
+    return prefactor * chi * (1 / beta) * ((1 + beta ** 2) / (2 * beta) * np.log((1 + beta) / (1 - beta)) - 1)
 
 
 # Define form factors
@@ -29,6 +49,14 @@ def _atomic_elastic_ff(t, m, z):
     b = 1194*np.power(2.718, -1/2)*np.power(z, -2/3) / me
     return (z*t*b**2)**2 / (1 + t*b**2)**2
 
+def _screening(e, ma):
+    if ma == 0:
+        return 0
+    r0 = 1/0.001973  # 0.001973 MeV A -> 1 A (Ge) = 1/0.001973
+    x = (r0 * ma**2 / (4*e))**2
+    numerator = 2*log(2*e/ma) - 1 - exp(-x) * (1 - exp(-x)/2) + (x + 0.5)*exp1(2*x) - (1+x)*exp1(x)
+    denomenator = 2*log(2*e/ma) - 1
+    return numerator / denomenator
 
 
 # Directional axion production and detection
@@ -49,32 +77,13 @@ class Axion:
         self.axion_weight = []
         self.simulate()
 
-
     def form_factor(self):
         # place holder for now, included in the cross section
         return 1
 
-    def screening(self):
-        return 1.62 * np.power(self.axion_mass, 1.92) # taken from fit to PhysRevD.37.618
-
-    def primakoff_production_xs(self, z, a):
-        me = 0.511
-        prefactor = (1 / 137 / 4) * (self.axion_coupling ** 2)
-        return prefactor * ((z ** 2) * (np.log(184 * np.power(z, -1 / 3)) \
-               + np.log(403 * np.power(a, -1 / 3) / me)) \
-               + z * np.log(1194 * np.power(z, -2 / 3)))
-
-    def primakoff_scattering_xs(self, energy, z):
-        if energy < self.axion_mass:
-            return
-
-        beta = min(np.sqrt(energy**2 - self.axion_mass**2) / energy, 0.99999999999)
-        chi = 1 #self.screening()
-        prefactor = (1/137/2) * (self.axion_coupling * z) ** 2
-        return prefactor * chi * (1 / beta) * ((1 + beta**2)/(2*beta) * np.log((1 + beta) / (1 - beta)) - 1)
-
-    def branching_ratio(self):
-        cross_prim = self.primakoff_production_xs(self.target_z, 2*self.target_z)
+    def branching_ratio(self, energy):
+        cross_prim = primakoff_production_xs(energy, self.target_z, 2*self.target_z,
+                                             self.axion_mass, self.axion_coupling)
         return cross_prim / (cross_prim + (self.target_photon_cross / (100 * meter_by_mev) ** 2))
 
     def photon_axion_cross(self, pgamma):
@@ -90,7 +99,7 @@ class Axion:
     def simulate_single(self, energy, rate, nsamplings=1000):
         if energy <= 1.5*self.axion_mass:# or np.abs(2*pgamma*np.sqrt(-ma**2+pgamma**2)/(ma**2-2*pgamma**2))>=1:
             return
-        prob = self.branching_ratio() # probability of axion conversion
+        prob = self.branching_ratio(energy) # probability of axion conversion
         axion_p = np.sqrt(energy ** 2 - self.axion_mass ** 2)
         axion_v = min(axion_p / energy, 0.99999999999)
         axion_boost = energy / self.axion_mass
@@ -100,6 +109,7 @@ class Axion:
             if self.detector_distance / decay_length < 100 else 1
         axion_decay = np.random.exponential(tau, nsamplings)  # draw from distribution of decay times
         axion_pos = axion_decay * axion_v  # x = t * v
+        # generate 2gamma decay
         photon_cs = np.random.uniform(-1, 1, nsamplings)
         for i in range(nsamplings):
             photon1_momentum = np.array([self.axion_mass/2, self.axion_mass/2*np.sqrt(1-photon_cs[i]**2), 0, self.axion_mass/2*photon_cs[i]])
@@ -157,7 +167,8 @@ class Axion:
                    / (4 * pi * self.detector_distance ** 2)
         for i in range(len(self.axion_energy)):
             if self.axion_energy[i] >= threshold:
-                res += self.axion_weight[i] * self.primakoff_scattering_xs(self.axion_energy[i], detector_z)
+                res += self.axion_weight[i] * primakoff_scattering_xs(self.axion_energy[i], detector_z,
+                                                                      self.axion_mass, self.axion_coupling)
         return res * exposure
 
     def scatter_events_binned(self, detector_number, detector_z, detection_time, threshold):
@@ -167,14 +178,16 @@ class Axion:
         for i in range(len(self.axion_energy)):
             if self.axion_energy[i] >= threshold:
                 scatter_photon_weight.append(exposure * self.axion_weight[i]
-                                             * self.primakoff_scattering_xs(self.axion_energy[i], detector_z))
+                                             * primakoff_scattering_xs(self.axion_energy[i], detector_z,
+                                                                       self.axion_mass, self.axion_coupling))
         return self.axion_energy, scatter_photon_weight
 
 
 
 class IsotropicAxionFromPrimakoff:
-    def __init__(self, photon_rates, axion_mass, axion_coupling, target_mass, target_z,
-                target_photon_cross, detector_distance, detector_length):
+    def __init__(self, photon_rates=[1,1], axion_mass=0.1, axion_coupling=1e-4,
+                 target_mass=240e3, target_z=90, target_photon_cross=15e-24, detector_distance=4,
+                 detector_length=0.2):
         self.photon_rates = photon_rates  # per second
         self.axion_mass = axion_mass  # MeV
         self.axion_coupling = axion_coupling  # MeV^-1
@@ -188,51 +201,35 @@ class IsotropicAxionFromPrimakoff:
         self.photon_weight = []
         self.axion_energy = []
         self.axion_weight = []
+        self.axion_decay_prob = []
+        self.axion_surv_prob = []
+        self.axion_velocity = []
         self.simulate()
 
-    def form_factor(self):
-        # place holder for now, included in the cross section
-        return 1
-
-    def primakoff_production_xs(self, energy, z, a): #Tsai, '86
-        if energy < self.axion_mass:
-            return 0
-        me = 0.511
-        prefactor = (1 / 137 / 4) * (self.axion_coupling ** 2)
-        return prefactor * ((z ** 2) * (np.log(184 * np.power(z, -1 / 3)) \
-            + np.log(403 * np.power(a, -1 / 3) / me)) \
-            + z * np.log(1194 * np.power(z, -2 / 3)))
-
-    def primakoff_scattering_xs(self, energy, z):
-        if energy < self.axion_mass:
-            return 0
-        beta = np.sqrt(energy ** 2 - self.axion_mass ** 2) / energy
-        chi = 1
-        prefactor = (1 / 137 / 2) * (self.axion_coupling * z) ** 2
-        return prefactor * chi * (1 / beta) * ((1 + beta ** 2) / (2 * beta) * np.log((1 + beta) / (1 - beta)) - 1)
 
     def branching_ratio(self, energy):
-        cross_prim = self.primakoff_production_xs(energy, self.target_z, 2 * self.target_z)
+        cross_prim = primakoff_production_xs(energy, self.target_z, 2 * self.target_z,
+                                             self.axion_mass, self.axion_coupling)
         return cross_prim / (cross_prim + (self.target_photon_cross / (100 * meter_by_mev) ** 2))
 
     # Convolute axion production and decay rates with a photon flux
     def simulate_single(self, energy, rate):
         if energy <= self.axion_mass:
             return
-        prob = self.branching_ratio(energy)
-        axion_p = np.sqrt(energy ** 2 - self.axion_mass ** 2)
-        axion_v = axion_p / energy
-        axion_boost = energy / self.axion_mass
-        tau = 64 * pi / (self.axion_coupling ** 2 * self.axion_mass ** 3) * axion_boost
-        decay_length = meter_by_mev * axion_v * tau
-        lg_surv_prob =  -self.detector_distance / meter_by_mev / axion_v / tau
-        decay_in_detector = mpmathify(1 - np.exp(-self.detector_length / meter_by_mev / axion_v / tau))
+        prob = mpmathify(self.branching_ratio(energy))
+        axion_p = mp.sqrt(energy ** 2 - self.axion_mass ** 2)
+        axion_v = mpmathify(axion_p / energy)
+        self.axion_velocity.append(axion_v)
+        axion_boost = mpmathify(energy / self.axion_mass)
+        tau = mpmathify(64 * pi / (self.axion_coupling ** 2 * self.axion_mass ** 3) * axion_boost)
+        surv_prob =  mp.exp(-self.detector_distance / meter_by_mev / axion_v / tau)
+        decay_in_detector = fsub(1,mp.exp(-self.detector_length / meter_by_mev / axion_v / tau))
+        self.axion_decay_prob.append(decay_in_detector)
+        self.axion_surv_prob.append(surv_prob)
         self.photon_energy.append(energy)
-        self.photon_weight.append(rate * prob * np.exp(lg_surv_prob) * decay_in_detector \
-                                  / (4*pi*self.detector_distance ** 2))
+        self.photon_weight.append(rate * prob * surv_prob * decay_in_detector / (4*pi*self.detector_distance ** 2))
         self.axion_energy.append(energy)
-        self.axion_weight.append(np.exp(lg_surv_prob) * rate * prob \
-                                 / (4*pi*self.detector_distance ** 2))
+        self.axion_weight.append(surv_prob * rate * prob / (4*pi*self.detector_distance ** 2))
 
     # Loops over photon flux and fills the photon and axion energy arrays.
     def simulate(self):
@@ -240,6 +237,9 @@ class IsotropicAxionFromPrimakoff:
         self.photon_weight = []
         self.axion_energy = []
         self.axion_weight = []
+        self.axion_decay_prob = []
+        self.axion_surv_prob = []
+        self.axion_velocity = []
         for f in self.photon_rates:
             self.simulate_single(f[0], f[1])
 
@@ -254,7 +254,8 @@ class IsotropicAxionFromPrimakoff:
         res = 0
         for i in range(len(self.axion_energy)):
             if self.axion_energy[i] >= threshold:
-                res += self.axion_weight[i] * self.primakoff_scattering_xs(self.axion_energy[i], detector_z) \
+                res += self.axion_weight[i] * primakoff_scattering_xs(self.axion_energy[i], detector_z,
+                                                                      self.axion_mass, self.axion_coupling) \
                     * detection_time * detector_number * meter_by_mev ** 2
         return res 
 
@@ -270,7 +271,8 @@ class IsotropicAxionFromPrimakoff:
         res = np.zeros(len(self.axion_weight))
         for i in range(len(self.axion_energy)):
             if self.axion_energy[i] >= threshold:
-                res[i] = self.axion_weight[i] * self.primakoff_scattering_xs(self.axion_energy[i], detector_z) \
+                res[i] = self.axion_weight[i] * primakoff_scattering_xs(self.axion_energy[i], detector_z,
+                                                                        self.axion_mass, self.axion_coupling) \
                         * detection_time * detector_number * meter_by_mev ** 2
         return res 
 
@@ -298,9 +300,6 @@ class IsotropicAxionFromCompton:
         self.axion_scatter_cross = []
         self.simulate(1)
 
-    def form_factor(self):
-        # place holder for now, included in the cross section
-        return 1
 
     def simulate_single(self, eg, rate):
         s = 2 * me * eg + me ** 2
