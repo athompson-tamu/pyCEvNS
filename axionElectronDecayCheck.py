@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from scipy.integrate import quad
 from scipy.interpolate import UnivariateSpline
 
-from pyCEvNS.axion import MinerAxionElectron
+from pyCEvNS.axion import IsotropicAxionFromCompton
 from matplotlib.pylab import rc
 
 import sys
@@ -39,7 +39,7 @@ def main():
 
     miner_flux = np.genfromtxt('data/reactor_photon.txt')  # flux at reactor surface
     miner_flux[:, 1] *= 1e8  # get flux at the core
-    generator = MinerAxionElectron(miner_flux, 2.2, 1e-6, 240e3, 90, 15e-24, det_dis, 0.1)
+    generator = IsotropicAxionFromCompton(miner_flux, 2.2, 1e-6, 240e3, 90, 15e-24, det_dis, 0.1)
     generator.simulate()
     
     generator.axion_coupling = 3e-6

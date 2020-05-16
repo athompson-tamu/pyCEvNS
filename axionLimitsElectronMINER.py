@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from scipy.integrate import quad
 from scipy.interpolate import UnivariateSpline
 
-from pyCEvNS.axion import MinerAxionElectron
+from pyCEvNS.axion import IsotropicAxionFromCompton
 from matplotlib.pylab import rc
 
 
@@ -159,7 +159,7 @@ def BinarySearch(m_a, m_b, nbins, flux, dru_limit=None, ev_limit=None, detector=
   print("Event threshold: ", event_limit)
   malist_miner_estim_scatter = np.logspace(m_a, m_b, nbins)
   galist_miner_estim_scatter = np.zeros_like(malist_miner_estim_scatter)
-  photon_gen = MinerAxionElectron(flux, 1, 1e-6, 240e3, 90, 15e-24, det_dis, 0)
+  photon_gen = IsotropicAxionFromCompton(flux, 1, 1e-6, 240e3, 90, 15e-24, det_dis, 0)
   for i in range(malist_miner_estim_scatter.shape[0]):
     print("Simulating mass point ", i)
     lo = -8
