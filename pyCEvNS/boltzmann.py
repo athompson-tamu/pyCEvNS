@@ -67,4 +67,3 @@ def boltzmann(epsilon, ma, alphad=0.5, mf=me, mchi_ratio=3, xinit=1, xfin=10000)
     def func(x, y):
         return -1/x**2*sigmav(epsilon, ma,1/x, alphad, mf, mchi_ratio) * (y**2-(4*0.192*mp*m*x**1.5*np.exp(-x))**2)
     return solve_ivp(func, (xinit, xfin), [4*0.192*mp*m*np.exp(-1)], method='BDF')
-

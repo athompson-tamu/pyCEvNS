@@ -262,8 +262,10 @@ def rates_dm_electron(er, det: Detector, fx: DMFlux, mediator_mass=None,
         epsilon = fx.epsi_quark
 
     def rates(err):
-        prefactor = e_charge**4 * det.z * epsilon**2 / (4*np.pi * (2*me*err+mediator_mass**2)**2)
-        res = prefactor * np.dot(det.frac, (2*me*fx.fint2(err, me)
+        if err < det.er_min:
+            return 0
+        prefactor = e_charge**4 * epsilon**2 / (4*np.pi * (2*me*err+mediator_mass**2)**2)
+        res = prefactor * np.dot(det.frac, det.z * (2*me*fx.fint2(err, me)
                                             - 2*me*err*fx.fint1(err, me)
                                             - err*(me**2-fx.dm_m**2)*fx.fint(err, me)
                                             + err**2*me*fx.fint(err, me)))
@@ -298,6 +300,8 @@ def rates_dm(er, det: Detector, fx: DMFlux, mediator_mass=None, epsilon=None, ef
         epsilon = fx.epsi_quark
 
     def rates(err):
+        if err < det.er_min:
+            return 0
         res = np.dot(det.frac, e_charge**4 * epsilon**2 * det.z**2 *
                       (2*det.m*fx.fint2(err, det.m) -
                        (err)*2*det.m*fx.fint1(err, det.m) -(det.m**2*err-fx.dm_m**2*err)*fx.fint(err, det.m) +
@@ -382,16 +386,57 @@ class DmEventsGen:
         self.size = size
         self.generate_flux()
 
-    def events(self, mediator_mass, epsilon, n_meas, channel="nucleus"):
+    def events(self, mediator_mass, epsilon, energy_edges, timing_edges, channel="nucleus"):
         """
         generate events according to the time and energy in measured data
         :param mediator_mass: mediator mass
         :param epsilon: mediator coupling to quark multiply by mediator coupling to dark matter
         :param n_meas: measured data
+        :param energy_edges: energy bin edges [MeV]. Must be equally (linearly) spaced.
+        :param timing_edges: time bin edges [microseconds]. Must be equally (linearly) spaced.
         :return: predicted number of event according to the time and energy in the measured data
         """
+        energy_bins = (energy_edges[:-1] + energy_edges[1:]) / 2
+        timing_bins = (timing_edges[:-1] + timing_edges[1:]) / 2
+        time_bin_width = timing_edges[1] - timing_edges[0]
+
+        n_meas = np.zeros((energy_bins.shape[0] * len(timing_bins), 2))
+        n_dm = np.zeros(n_meas.shape[0])
+
+        flat_index = 0
+        for i in range(0, energy_bins.shape[0]):
+            for j in range(0, timing_bins.shape[0]):
+                n_meas[flat_index, 0] = energy_bins[i]
+                n_meas[flat_index, 1] = timing_bins[j]
+                flat_index += 1
+        
+        if len(self.fx.timing) == 0:
+            return n_dm, n_meas
+        
+        t_hist = np.histogram(self.fx.timing, bins=timing_edges)
+        probs = t_hist[0] / len(self.fx.timing) # time distribution PDF
+        for i in range(n_meas.shape[0]):
+            ti = np.where(timing_bins == n_meas[i,1])
+            ei = np.where(energy_bins == n_meas[i,0])
+            n_dm[i] = binned_events_dm(energy_edges[ei[0]], energy_edges[ei[0]+1], self.expo,
+                                       self.det, self.fx, mediator_mass, epsilon, eff_coherent,
+                                       self.smear, rn=self.rn, channel=channel) * probs[ti]
+        return n_dm, n_meas 
+
+        """
+    def events(self, mediator_mass, epsilon, n_meas, channel="nucleus"):
+        """
+        #generate events according to the time and energy in measured data
+        #:param mediator_mass: mediator mass
+        #:param epsilon: mediator coupling to quark multiply by mediator coupling to dark matter
+        #:param n_meas: measured data
+        #:return: predicted number of event according to the time and energy in the measured data
+        """
+        # TODO (me): have to fix these hard-coded timing bins
         pe_per_mev = 0.0878 * 13.348 * 1000
         n_dm = np.zeros(n_meas.shape[0])
+        if len(self.fx.timing) == 0:
+            return n_dm
         tmin = n_meas[:, 1].min()
         plist = np.zeros(int((n_meas[:, 1].max()-tmin)/0.5)+1)
         for tt in self.fx.timing:
@@ -406,7 +451,7 @@ class DmEventsGen:
                                        self.det, self.fx, mediator_mass, epsilon, eff_coherent,
                                        self.smear, rn=self.rn, channel=channel) * plist[int((t-tmin)/0.5)]
         return n_dm
-
+        """
 
 class HelmFormFactor:
     """

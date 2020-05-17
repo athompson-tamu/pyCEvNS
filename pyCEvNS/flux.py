@@ -10,6 +10,78 @@ from .oscillation import survival_solar
 from .parameters import *
 
 
+
+def _invs(ev):
+    return 1/ev**2
+
+
+
+class FluxBaseContinuous:
+    def __init__(self, ev, flux, norm=1):
+        self.norm = norm
+        self.ev = ev
+        self.fx = flux
+        self.ev_min = self.ev[0]
+        self.ev_max = self.ev[-1]
+        self.binw = self.ev[1:] - self.ev[:-1]
+        self.precalc = {None: self.binw*(self.fx[1:]+self.fx[:-1])/2}
+
+    def __call__(self, ev):
+        if ev == self.ev_min:
+            return self.fx[0] * self.norm
+        if ev == self.ev_max:
+            return self.fx[-1] * self.norm
+        if self.ev_min < ev < self.ev_max:
+            idx = self.ev.searchsorted(ev)
+            l1 = ev - self.ev[idx-1]
+            l2 = self.ev[idx] - ev
+            h1 = self.fx[idx-1]
+            h2 = self.fx[idx]
+            return (l1*h2 + l2*h1) / (l1 + l2) * self.norm
+        return 0
+
+    def integrate(self, ea, eb, weight_function=None):
+        if eb <= ea:
+            return 0
+        res = 0
+        if weight_function not in self.precalc:
+            weighted = weight_function(self.ev)*self.fx
+            self.precalc[weight_function] = self.binw * (weighted[1:]+weighted[:-1]) / 2
+        eb = min(eb, self.ev_max)
+        ea = max(ea, self.ev_min)
+        idxmin = self.ev.searchsorted(ea, side='right')
+        idxmax = self.ev.searchsorted(eb, side='left')
+        if idxmin == idxmax:
+            l1 = ea - self.ev[idxmin - 1]
+            l2 = self.ev[idxmin] - ea
+            h1 = self.fx[idxmin - 1] * weight_function(self.ev[idxmin - 1]) \
+                if weight_function is not None else self.fx[idxmin - 1]
+            h2 = self.fx[idxmin] * weight_function(self.ev[idxmin]) \
+                if weight_function is not None else self.fx[idxmin]
+            ha = (l1*h2+l2*h1)/(l1+l2)
+            l1 = eb - self.ev[idxmax - 1]
+            l2 = self.ev[idxmax] - eb
+            hb = (l1*h2+l2*h1)/(l1+l2)
+            return (ha + hb) * (eb - ea) / 2 * self.norm
+        res += np.sum(self.precalc[weight_function][idxmin:idxmax-1])
+        l1 = ea - self.ev[idxmin-1]
+        l2 = self.ev[idxmin] - ea
+        h1 = self.fx[idxmin-1]*weight_function(self.ev[idxmin-1]) \
+            if weight_function is not None else self.fx[idxmin-1]
+        h2 = self.fx[idxmin]*weight_function(self.ev[idxmin]) \
+            if weight_function is not None else self.fx[idxmin]
+        res += ((l1*h2+l2*h1)/(l1+l2)+h2)*l2/2
+        l1 = eb - self.ev[idxmax - 1]
+        l2 = self.ev[idxmax] - eb
+        h1 = self.fx[idxmax - 1] * weight_function(self.ev[idxmax - 1]) \
+            if weight_function is not None else self.fx[idxmax-1]
+        h2 = self.fx[idxmax] * weight_function(self.ev[idxmax]) \
+            if weight_function is not None else self.fx[idxmax]
+        res += ((l1 * h2 + l2 * h1) / (l1 + l2) + h1) * l1 / 2
+        return res * self.norm
+
+
+
 class Flux:
     """
     flux class,
@@ -311,525 +383,138 @@ class Flux:
         return res
 
 
-class DMFlux:
-    """
-    Dark matter flux at COHERENT
-    """
-    def __init__(self, dark_photon_mass, life_time, coupling_quark, dark_matter_mass,
-                 detector_distance=19.3, pot_mu=0.75, pot_sigma=0.25, size=100000):
-        """
-        initialize and generate flux
-        :param dark_photon_mass: dark photon mass
-        :param life_time: life time of dark photon in rest frame, unit in micro second
-        :param coupling_quark: dark photon coupling to quarks
-        :param dark_matter_mass: mass of dark matter, unit in MeV
-        :param detector_distance: distance from the detector to the Hg target
-        :param pot_mu: mean of guassian distribution of proton on target, unit in micro second
-        :param pot_sigma: std of guassian distribution of proton on target, unit in micro second
-        :param size: size of sampling dark photons
-        """
-        self.dp_mass = dark_photon_mass
-        self.dm_mass = dark_matter_mass
-        self.epsi_quark = coupling_quark
-        self.det_dist = detector_distance / meter_by_mev
-        self.dp_life = life_time * 1e-6 * c_light / meter_by_mev
-        self.mu = pot_mu * 1e-6 * c_light / meter_by_mev
-        self.sigma = pot_sigma * 1e-6 * c_light / meter_by_mev
-        self.timing, self.energy = self._generate(size)
-        self.ed_min = self.energy.min()
-        self.ed_max = self.energy.max()
-        self.dm_norm = self.epsi_quark**2*0.23*1e20 / (4*np.pi*(detector_distance**2)*24*3600) * (meter_by_mev**2) * \
-            self.timing.shape[0] * 2 / size
 
-    def _generate(self, size=1000000):
-        """
-        generate dark matter flux at COHERENT
-        :param size: size of sampling dark photons
-        :return: time and energy histogram of dark matter
-        """
-        dp_m = self.dp_mass
-        dp_e = ((massofpi+massofp)**2 - massofn**2 + dp_m**2)/(2*(massofpi+massofp))
-        dp_p = np.sqrt(dp_e ** 2 - dp_m ** 2)
-        dp_v = dp_p / dp_e
-        gamma = dp_e / dp_m
-        tau = self.dp_life * gamma
-        tf = np.random.normal(self.mu, self.sigma, size)  # POT
-        t = np.random.exponential(tau, size)  # life time of each dark photon
-        cs = np.random.uniform(-1, 1, size)  # direction of each dark photon
-        # in rest frame
-        estar = dp_m / 2
-        pstar = np.sqrt(estar ** 2 - self.dm_mass ** 2)
-        pstarx = pstar * cs
-        pstary = pstar * np.sqrt(1 - cs ** 2)
-        # boost to lab frame
-        elab = gamma * (estar + dp_v * pstarx)
-        plabx = gamma * (pstarx + dp_v * estar)
-        plaby = pstary
-        vx = plabx / elab
-        vy = plaby / elab
-        timing = []
-        energy = []
-        for i in range(size):
-            a = vx[i] ** 2 + vy[i] ** 2
-            b = 2 * vx[i] * t[i] * dp_v
-            cc = dp_v ** 2 * t[i] ** 2 - self.det_dist ** 2
-            if b ** 2 - 4 * a * cc >= 0:
-                if (-b - np.sqrt(b ** 2 - 4 * a * cc)) / (2 * a) > 0:
-                    timing.append((-b - np.sqrt(b ** 2 - 4 * a * cc)) / (2 * a) + t[i] + tf[i])
-                    energy.append(elab[i])
-                if (-b + np.sqrt(b ** 2 - 4 * a * cc)) / (2 * a) > 0:
-                    timing.append((-b + np.sqrt(b ** 2 - 4 * a * cc)) / (2 * a) + t[i] + tf[i])
-                    energy.append(elab[i])
-        return np.array(timing) / c_light * meter_by_mev * 1e6, np.array(energy)
+class NeutrinoFluxFactory:
+    def __init__(self):
+        self.flux_list = ['solar', 'solar_b8', 'solar_f17', 'solar_hep', 'solar_n13', 'solar_o15', 'solar_pp',
+                          'solar_pep', 'solar_be7', 'coherent', 'coherent_prompt', 'coherent_delayed',
+                          'far_beam_nu', 'far_beam_nubar', 'atmospheric','jsns_prompt', 'jsns_delayed', 'jsns_prompt_continuous']
 
-    def flux(self, ev):
-        """
-        dark matter flux
-        :param ev: dark matter energy
-        :return: dark matter flux
-        """
-        return 1/(self.ed_max-self.ed_min)*self.dm_norm if self.ed_min <= ev <= self.ed_max else 0
+    def print_available(self):
+        print(self.flux_list)
+    
+    def interp_flux(self, nrg, data):
+        return np.interp(nrg, data[:,0], data[:,1])
 
-    def fint(self, er, m, **kwargs):
-        """
-        flux/(ex^2-mx^2) integration
-        :param er: recoil energy in MeV
-        :param m: target nucleus mass in MeV
-        :param kwargs: other argument
-        :return: flux/(ex^2-mx^2) integration
-        """
-        emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_mass**2+4*m*self.dm_mass**2)/m) + er)
+    def get(self, flux_name, **kwargs):
+        if flux_name not in self.flux_list:
+            print('flux name not in current list: ', self.flux_list)
+            raise Exception('flux not found.')
+        if flux_name in ['solar_b8', 'solar_f17', 'solar_hep', 'solar_n13', 'solar_o15', 'solar_pp']:
+            f = np.genfromtxt(pkg_resources.resource_filename(__name__, 'data/' + flux_name[6:] + '.csv'), delimiter=',')
+            return NeutrinoFlux(continuous_fluxes={'ev': f[:, 0], 'e': f[:, 1]})
+        if flux_name == 'solar':
+            f = np.genfromtxt(pkg_resources.resource_filename(__name__, 'data/' + flux_name + '.csv'), delimiter=',')
+            return NeutrinoFlux(continuous_fluxes={'ev': f[:, 0], 'e': f[:, 1]}, delta_fluxes={'e': [(1.439, 1.44e8), (0.8613, 5e9)]})
+        if flux_name == 'pep':
+            return NeutrinoFlux(delta_fluxes={'e': [(1.439, 1.44e8), ]})
+        if flux_name == 'be7':
+            return NeutrinoFlux(delta_fluxes={'e': [(0.8613, 5e9), ]})
+        if flux_name == 'coherent':
+            def de(evv):
+                return (3 * ((evv / (2 / 3 * 52)) ** 2) - 2 * ((evv / (2 / 3 * 52)) ** 3)) / 29.25
+            def dmubar(evv):
+                return (3 * ((evv / 52) ** 2) - 2 * ((evv / 52) ** 3)) / 26
+            ev = np.linspace(0.001, 52, 100)
+            return NeutrinoFlux(continuous_fluxes={'ev': ev, 'e': de(ev), 'mubar': dmubar(ev)},
+                                delta_fluxes={'mu': [(29, 1)]}, norm=1.13 * (10 ** 7)) ## default unit is /(cm^2*s)
+        if flux_name == 'coherent_delayed':
+            def de(evv):
+                return (3 * ((evv / (2 / 3 * 52)) ** 2) - 2 * ((evv / (2 / 3 * 52)) ** 3)) / 29.25
+            def dmubar(evv):
+                return (3 * ((evv / 52) ** 2) - 2 * ((evv / 52) ** 3)) / 26
+            ev = np.linspace(0.001, 52, kwargs['npoints'] if 'npoints' in kwargs else 100)
+            return NeutrinoFlux(continuous_fluxes={'ev': ev, 'e': de(ev), 'mubar': dmubar(ev)}, norm=1.13 * (10 ** 7))
+        if flux_name == 'coherent_prompt':
+            return NeutrinoFlux(delta_fluxes={'mu': [(29, 1)]}, norm=1.13 * (10 ** 7))
+        if flux_name == 'jsns':
+            nu_e = np.genfromtxt(pkg_resources.resource_filename(__name__, "data/jsns2/jsns_nu_e.txt"), delimiter=',')
+            nu_mu = np.genfromtxt(pkg_resources.resource_filename(__name__, "data/jsns2/jsns_nu_mu_nodelta.txt"), delimiter=',')
+            nubar_mu = np.genfromtxt(pkg_resources.resource_filename(__name__, "data/jsns2/jsns_nubar_mu.txt"), delimiter=',')
 
-        def integrand(ex):
-            return self.flux(ex)/(ex**2 - self.dm_mass**2)
+            norm_nu_e = quad(self.interp_flux, 0, 300, args=(nu_e,))[0]
+            norm_nu_mu = quad(self.interp_flux, 0, 300, args=(nu_mu,))[0]
+            norm_nubar_mu = quad(self.interp_flux, 0, 300, args=(nubar_mu,))[0]
 
-        if not isinstance(emin, np.ndarray):
-            res = quad(integrand, emin, self.ed_max)[0]
-        else:
-            res = np.zeros_like(emin)
-            for i in range(emin.shape[0]):
-                res[i] = quad(integrand, emin[i], self.ed_max)[0]
-        return res
+            def numuPDF(energy):
+                return self.interp_flux(energy, nu_mu) / norm_nu_mu
 
-    def fint1(self, er, m, **kwargs):
-        """
-        flux*ex/(ex^2-mx^2) integration
-        :param er: recoil energy in MeV
-        :param m: target nucleus mass in MeV
-        :param kwargs: other argument
-        :return: flux*ex/(ex^2-mx^2) integration
-        """
-        emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_mass**2+4*m*self.dm_mass**2)/m) + er)
+            def nuePDF(energy):
+                return self.interp_flux(energy, nu_e) / norm_nu_e
 
-        def integrand(ex):
-            return self.flux(ex) * ex / (ex ** 2 - self.dm_mass ** 2)
+            def nubarmuPDF(energy):
+                return self.interp_flux(energy, nubar_mu) / norm_nubar_mu
+            
+            edges = np.arange(0, 302, 2) # energy bin edges
+            ev = (edges[:-1] + edges[1:]) / 2
 
-        if not isinstance(emin, np.ndarray):
-            res = quad(integrand, emin, self.ed_max)[0]
-        else:
-            res = np.zeros_like(emin)
-            for i in range(emin.shape[0]):
-                res[i] = quad(integrand, emin[i], self.ed_max)[0]
-        return res
+            return NeutrinoFlux(continuous_fluxes={'ev': ev, 'e': nuePDF(ev), 'mubar': nubarmuPDF(ev), 'mu': numuPDF(ev)},
+                                delta_fluxes={'mu': [(29, 1),(236, 0.013)]}, norm=4.9 * (10 ** 7)) ## default unit is /(cm^2*s)
+        if flux_name == 'jsns_delayed':
+            nu_e = np.genfromtxt(pkg_resources.resource_filename(__name__, "data/jsns2/jsns_nu_e.txt"), delimiter=',')
+            nubar_mu = np.genfromtxt(pkg_resources.resource_filename(__name__, "data/jsns2/jsns_nubar_mu.txt"), delimiter=',')
 
-    def fint2(self, er, m, **kwargs):
-        """
-        flux*ex^2/(ex^2-mx^2) integration
-        :param er: recoil energy in MeV
-        :param m: target nucleus mass in MeV
-        :param kwargs: other argument
-        :return: flux*ex^2/(ex^2-mx^2) integration
-        """
-        emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_mass**2+4*m*self.dm_mass**2)/m) + er)
+            norm_nu_e = quad(self.interp_flux, 0, 300, args=(nu_e,))[0]
+            norm_nubar_mu = quad(self.interp_flux, 0, 300, args=(nubar_mu,))[0]
 
-        def integrand(ex):
-            return self.flux(ex) * ex**2 / (ex ** 2 - self.dm_mass ** 2)
+            def nuePDF(energy):
+                return self.interp_flux(energy, nu_e) / norm_nu_e
 
-        if not isinstance(emin, np.ndarray):
-            res = quad(integrand, emin, self.ed_max)[0]
-        else:
-            res = np.zeros_like(emin)
-            for i in range(emin.shape[0]):
-                res[i] = quad(integrand, emin[i], self.ed_max)[0]
-        return res
+            def nubarmuPDF(energy):
+                return self.interp_flux(energy, nubar_mu) / norm_nubar_mu
+            
+            edges = np.arange(0, 302, 2) # energy bin edges
+            ev = (edges[:-1] + edges[1:]) / 2
+            return NeutrinoFlux(continuous_fluxes={'ev': ev, 'e': nuePDF(ev), 'mubar': nubarmuPDF(ev)}, norm=3 * (10 ** 7))
+        if flux_name == 'jsns_prompt':  
+            return NeutrinoFlux(delta_fluxes={'mu': [(29, 1),(236, 0.013)]}, norm=1.85 * (10 ** 7))
+        if flux_name == 'jsns_prompt_continuous':
+            nu_mu = np.genfromtxt(pkg_resources.resource_filename(__name__, "data/jsns2/jsns_nu_mu_nodelta.txt"), delimiter=',')
+            norm_nu_mu = quad(self.interp_flux, 0, 300, args=(nu_mu,))[0]
+            
+            def numuPDF(energy):
+                return self.interp_flux(energy, nu_mu) / norm_nu_mu
+            
+            edges = np.arange(0, 302, 2) # energy bin edges
+            ev = (edges[:-1] + edges[1:]) / 2
+            
+            return NeutrinoFlux(continuous_fluxes={'ev': ev, 'mu': numuPDF(ev)},
+                                norm=1.85 * (10 ** 4))
+        if flux_name == 'far_beam_nu':
+            far_beam_txt = 'data/dune_beam_fd_nu_flux_120GeVoptimized.txt'
+            f_beam = np.genfromtxt(pkg_resources.resource_filename(__name__, far_beam_txt), delimiter=',')
+            nu = {'ev': f_beam[:, 0],
+                  'e': f_beam[:, 2],
+                  'mu': f_beam[:, 3],
+                  'ebar': f_beam[:, 5],
+                  'mubar': f_beam[:, 6]}
+            return NeutrinoFlux(continuous_fluxes=nu)
+        if flux_name == 'far_beam_nubar':
+            far_beam_txt = 'data/dune_beam_fd_antinu_flux_120GeVoptimized.txt'
+            f_beam = np.genfromtxt(pkg_resources.resource_filename(__name__, far_beam_txt), delimiter=',')
+            nu = {'ev': f_beam[:, 0],
+                  'e': f_beam[:, 2],
+                  'mu': f_beam[:, 3],
+                  'ebar': f_beam[:, 5],
+                  'mubar': f_beam[:, 6]}
+            return NeutrinoFlux(continuous_fluxes=nu)
+        if flux_name == 'atmospheric':
+            if 'zenith' not in kwargs:
+                raise Exception('please specify zenith angle')
+            zen = np.round(kwargs['zenith'], decimals=3)
+            zen_list = np.round(np.linspace(-0.975, 0.975, 40), decimals=3)
+            if zen not in zen_list:
+                print('available choice of zenith angle: ', zen_list)
+                raise Exception('zenith angle not available')
+            idx = (0.975 - zen) / 0.05 * 61
+            f_atmos = np.genfromtxt(pkg_resources.resource_filename(__name__, 'data/atmos.txt'), delimiter=',')
+            nu = {'ev': f_atmos[int(round(idx)):int(round(idx))+61, 0],
+                  'e': f_atmos[int(round(idx)):int(round(idx))+61, 2],
+                  'mu': f_atmos[int(round(idx)):int(round(idx))+61, 3],
+                  'ebar': f_atmos[int(round(idx)):int(round(idx))+61, 5],
+                  'mubar': f_atmos[int(round(idx)):int(round(idx))+61, 6]}
+            return NeutrinoFlux(continuous_fluxes=nu)
 
-
-class FluxBaseContinuous:
-    def __init__(self, ev, flux, norm=1):
-        self.norm = norm
-        self.ev = ev
-        self.fx = flux
-        self.ev_min = self.ev[0]
-        self.ev_max = self.ev[-1]
-        self.binw = self.ev[1:] - self.ev[:-1]
-        self.precalc = {None: self.binw*(self.fx[1:]+self.fx[:-1])/2}
-
-    def __call__(self, ev):
-        if ev == self.ev_min:
-            return self.fx[0] * self.norm
-        if ev == self.ev_max:
-            return self.fx[-1] * self.norm
-        if self.ev_min < ev < self.ev_max:
-            idx = self.ev.searchsorted(ev)
-            l1 = ev - self.ev[idx-1]
-            l2 = self.ev[idx] - ev
-            h1 = self.fx[idx-1]
-            h2 = self.fx[idx]
-            return (l1*h2 + l2*h1) / (l1 + l2) * self.norm
-        return 0
-
-    def integrate(self, ea, eb, weight_function=None):
-        if eb <= ea:
-            return 0
-        res = 0
-        if weight_function not in self.precalc:
-            weighted = weight_function(self.ev)*self.fx
-            self.precalc[weight_function] = self.binw * (weighted[1:]+weighted[:-1]) / 2
-        eb = min(eb, self.ev_max)
-        ea = max(ea, self.ev_min)
-        idxmin = self.ev.searchsorted(ea, side='right')
-        idxmax = self.ev.searchsorted(eb, side='left')
-        if idxmin == idxmax:
-            l1 = ea - self.ev[idxmin - 1]
-            l2 = self.ev[idxmin] - ea
-            h1 = self.fx[idxmin - 1] * weight_function(self.ev[idxmin - 1]) \
-                if weight_function is not None else self.fx[idxmin - 1]
-            h2 = self.fx[idxmin] * weight_function(self.ev[idxmin]) \
-                if weight_function is not None else self.fx[idxmin]
-            ha = (l1*h2+l2*h1)/(l1+l2)
-            l1 = eb - self.ev[idxmax - 1]
-            l2 = self.ev[idxmax] - eb
-            hb = (l1*h2+l2*h1)/(l1+l2)
-            return (ha + hb) * (eb - ea) / 2 * self.norm
-        res += np.sum(self.precalc[weight_function][idxmin:idxmax-1])
-        l1 = ea - self.ev[idxmin-1]
-        l2 = self.ev[idxmin] - ea
-        h1 = self.fx[idxmin-1]*weight_function(self.ev[idxmin-1]) \
-            if weight_function is not None else self.fx[idxmin-1]
-        h2 = self.fx[idxmin]*weight_function(self.ev[idxmin]) \
-            if weight_function is not None else self.fx[idxmin]
-        res += ((l1*h2+l2*h1)/(l1+l2)+h2)*l2/2
-        l1 = eb - self.ev[idxmax - 1]
-        l2 = self.ev[idxmax] - eb
-        h1 = self.fx[idxmax - 1] * weight_function(self.ev[idxmax - 1]) \
-            if weight_function is not None else self.fx[idxmax-1]
-        h2 = self.fx[idxmax] * weight_function(self.ev[idxmax]) \
-            if weight_function is not None else self.fx[idxmax]
-        res += ((l1 * h2 + l2 * h1) / (l1 + l2) + h1) * l1 / 2
-        return res * self.norm
-
-
-
-class DMFluxIsoPhoton(FluxBaseContinuous):
-    def __init__(self, photon_distribution, dark_photon_mass, coupling, dark_matter_mass, life_time=None,
-                 detector_distance=19.3, pot_rate=5e20, pot_sample=100000,
-                 pot_mu=0.7, pot_sigma=0.15, sampling_size=100, nbins=10, verbose=False):
-        self.photon_flux = photon_distribution
-        self.dp_m = dark_photon_mass
-        self.dm_m = dark_matter_mass
-        self.epsilon = coupling
-        self.life_time = self.getLifeTime(coupling, dark_photon_mass)
-        if life_time is not None:
-            self.life_time = life_time * 1e-6
-        self.det_dist = detector_distance
-        self.pot_rate = pot_rate  # the number of POT/day in the experiment
-        self.pot_mu = pot_mu * 1e-6
-        self.pot_sigma = pot_sigma * 1e-6
-        self.pot_sample = pot_sample  # the number of POT corresponding to the supplied photon_distribution sample
-        self.time = []
-        self.energy = []
-        self.weight = []
-        self.norm = 1
-        self.sampling_size = sampling_size
-        self.verbose = verbose
-        for photon_events in photon_distribution:
-            if self.verbose:
-                print("getting photons from E =", photon_events[0], "Size =", photon_events[1])
-            self._generate(photon_events, self.sampling_size)
-
-        self.timing = np.array(self.time) * 1e6
-        normalization = self.epsilon ** 2 * (self.pot_rate / self.pot_sample) \
-                        / (4 * np.pi * (self.det_dist ** 2) * 24 * 3600)\
-                        * len(self.time) / len(self.photon_flux) * (meter_by_mev**2)
-        self.norm = normalization
-
-        hist, bin_edges = np.histogram(self.energy, bins=nbins, weights=self.weight, density=True)
-        super().__init__((bin_edges[:-1] + bin_edges[1:]) / 2, hist, norm=np.sum(self.weight)*normalization)
-
-    def getLifeTime(self, g, m):
-        return ((16 * np.pi ** 2) / ((g ** 2) * m)) * mev_per_hz
-
-
-    def getScaledWeights(self):
-        wgt = self.weight
-        wgt = [x * self.norm * 24 * 3600 / (meter_by_mev**2) for x in wgt]
-        return wgt
-
-    def _generate(self, photon_events, nsamples):
-        # Initiate photon position, energy and momentum.
-        if photon_events[0]**2 < self.dp_m**2:
-            return
-        dp_m = self.dp_m
-        dp_e = photon_events[0]
-        dp_p = np.sqrt(photon_events[0] ** 2 - self.dp_m ** 2)
-        dp_momentum = np.array([dp_e, 0, 0, dp_p])
-
-
-        # dark photon to dark matter
-        dm_m = self.dm_m
-        dm_e = self.dp_m / 2
-        dm_p = np.sqrt(dm_e ** 2 - dm_m ** 2)
-
-        # Directional sampling.
-        dp_wgt = photon_events[1] / nsamples  # Event weight
-        for i in range(0, nsamples):
-            t = 0
-            pos = np.zeros(3)
-            t += np.random.normal(self.pot_mu, self.pot_sigma)
-            #t += np.random.exponential(8.4e-17)
-            t_dp = np.random.exponential(self.life_time * dp_momentum[0] / dp_m)
-            pos += c_light * t_dp * np.array(
-                [dp_momentum[1] / dp_momentum[0], dp_momentum[2] / dp_momentum[0], dp_momentum[3] / dp_momentum[0]])
-            t += t_dp
-            csd = np.random.uniform(-1, 1)
-            phid = np.random.uniform(0, 2 * np.pi)
-            dm_momentum = np.array([dm_e, dm_p * np.sqrt(1 - csd ** 2) * np.cos(phid),
-                                    dm_p * np.sqrt(1 - csd ** 2) * np.sin(phid), dm_p * csd])
-            dm_momentum = lorentz_boost(dm_momentum,
-                                        np.array([-dp_momentum[1] / dp_momentum[0],
-                                                  -dp_momentum[2] / dp_momentum[0],
-                                                  -dp_momentum[3] / dp_momentum[0]]))
-
-            # dark matter arrives at detector, assuming azimuthal symmetric
-            # append the time and energy spectrum of the DM.
-            v = dm_momentum[1:] / dm_momentum[0] * c_light
-            a = np.sum(v ** 2)
-            b = 2 * np.sum(v)
-            c = np.sum(pos ** 2) - self.det_dist ** 2
-            if b ** 2 - 4 * a * c >= 0:
-                t_dm = (-b + np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
-                if t_dm >= 0:
-                    if self.verbose:
-                        print("adding weight", dp_wgt)
-                    self.time.append(t+t_dm)
-                    self.energy.append(dm_momentum[0])
-                    self.weight.append(dp_wgt)
-                t_dm = (-b - np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
-                if t_dm >= 0:
-                    if self.verbose:
-                        print("adding weight", dp_wgt)
-                    self.time.append(t+t_dm)
-                    self.energy.append(dm_momentum[0])
-                    self.weight.append(dp_wgt)
-            v = (dp_momentum - dm_momentum)[1:] / (dp_momentum - dm_momentum)[0] * c_light
-            a = np.sum(v ** 2)
-            b = 2 * np.sum(v)
-            c = np.sum(pos ** 2) - self.det_dist ** 2
-            if b ** 2 - 4 * a * c >= 0:
-                t_dm = (-b + np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
-                if t_dm >= 0:
-                    if self.verbose:
-                        print("adding weight", dp_wgt)
-                    self.time.append(t+t_dm)
-                    self.energy.append((dp_momentum - dm_momentum)[0])
-                    self.weight.append(dp_wgt)
-                t_dm = (-b - np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
-                if t_dm >= 0:
-                    if self.verbose:
-                        print("adding weight", dp_wgt)
-                    self.time.append(t+t_dm)
-                    self.energy.append((dp_momentum - dm_momentum)[0])
-                    self.weight.append(dp_wgt)
-
-
-    def fint(self, er, m):
-        if np.isscalar(m):
-            m = np.array([m])
-        emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_m**2+4*m*self.dm_m**2)/m) + er)
-        res = np.zeros_like(emin)
-        for i in range(emin.shape[0]):
-            res[i] = self.integrate(emin[i], self.ev_max, weight_function=self.f0)
-        return res
-
-    def fint1(self, er, m):
-        if np.isscalar(m):
-            m = np.array([m])
-        emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_m**2+4*m*self.dm_m**2)/m) + er)
-        res = np.zeros_like(emin)
-        for i in range(emin.shape[0]):
-            res[i] = self.integrate(emin[i], self.ev_max, weight_function=self.f1)
-        return res
-
-    def fint2(self, er, m):
-        if np.isscalar(m):
-            m = np.array([m])
-        emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_m**2+4*m*self.dm_m**2)/m) + er)
-        res = np.zeros_like(emin)
-        for i in range(emin.shape[0]):
-            res[i] = self.integrate(emin[i], self.ev_max, weight_function=self.f2)
-        return res
-
-    def f0(self, ev):
-        return 1/(ev**2 - self.dm_m**2)
-
-    def f1(self, ev):
-        return ev/(ev**2 - self.dm_m**2)
-
-    def f2(self, ev):
-        return ev**2 / (ev**2 - self.dm_m**2)
-
-
-
-
-
-class DMFluxFromPhoton(FluxBaseContinuous):
-    def __init__(self, photon_distribution, dark_photon_mass, coupling, dark_matter_mass, life_time=0.0,
-                 detector_distance=19.3, detector_direction=0, detector_width=0.1, pot_rate=5e20, pot_sample=100000,
-                 pot_mu=0.7, pot_sigma=0.15, sampling_size=100, nbins=10, verbose=False):
-        self.photon_flux = photon_distribution
-        self.dp_m = dark_photon_mass
-        self.epsilon = coupling
-        self.life_time = life_time * 1e-6
-        self.dm_m = dark_matter_mass
-        self.det_dist = detector_distance
-        self.det_direc = detector_direction
-        self.det_width = detector_width
-        self.pot_rate = pot_rate  # the number of POT/day in the experiment
-        self.pot_mu = pot_mu * 1e-6
-        self.pot_sigma = pot_sigma * 1e-6
-        self.pot_sample = pot_sample  # the number of POT corresponding to the supplied photon_distribution sample
-        self.time = []
-        self.energy = []
-        self.weight = []
-        self.dm_mass = dark_matter_mass
-        self.sampling_size = sampling_size
-        self.verbose = verbose
-        for photon_events in photon_distribution:
-            if self.verbose:
-                print("getting photons from E =", photon_events[0], "Size =", photon_events[1])
-            self._simulate_dm_events(photon_events, self.sampling_size)
-        self.timing = np.array(self.time) * 1e6
-        normalization = self.epsilon ** 2 * (self.pot_rate / self.pot_sample) \
-                        / (4 * np.pi * (self.det_dist ** 2) * 24 * 3600)\
-                        * len(self.time) / len(self.photon_flux) * (meter_by_mev**2)
-        hist, bin_edges = np.histogram(self.energy, bins=nbins, weights=self.weight)
-        super().__init__((bin_edges[:-1] + bin_edges[1:]) / 2, hist, norm=normalization)
-
-
-    def _simulate_dm_events(self, photon_events, nsamples):
-        # Initiate photon position, energy and momentum.
-        if photon_events[0]**2 < self.dp_m**2:
-            return
-        dp_m = self.dp_m
-        dp_e = photon_events[0]
-        dp_p = np.sqrt(photon_events[0] ** 2 - self.dp_m ** 2)
-        dp_momentum = np.array([dp_e, 0, 0, dp_p])
-
-
-        # dark photon to dark matter
-        dm_m = self.dm_m
-        dm_e = self.dp_m / 2
-        dm_p = np.sqrt(dm_e ** 2 - dm_m ** 2)
-
-        # Directional sampling.
-        dp_wgt = photon_events[1] / nsamples  # Event weight
-        for i in range(0, nsamples):
-            t = 0
-            pos = np.zeros(3)
-            t += np.random.normal(self.pot_mu, self.pot_sigma)
-            #t += np.random.exponential(8.4e-17) # pi0 decay at rest
-            t_dp = np.random.exponential(self.life_time * dp_momentum[0] / dp_m)
-            pos += c_light * t_dp * np.array(
-                [dp_momentum[1] / dp_momentum[0], dp_momentum[2] / dp_momentum[0], dp_momentum[3] / dp_momentum[0]])
-            t += t_dp
-            csd = np.random.uniform(-1, 1)
-            phid = np.random.uniform(0, 2 * np.pi)
-            dm_momentum = np.array([dm_e, dm_p * np.sqrt(1 - csd ** 2) * np.cos(phid),
-                                    dm_p * np.sqrt(1 - csd ** 2) * np.sin(phid), dm_p * csd])
-            dm_momentum = lorentz_boost(dm_momentum,
-                                        np.array([-dp_momentum[1] / dp_momentum[0],
-                                                  -dp_momentum[2] / dp_momentum[0],
-                                                  -dp_momentum[3] / dp_momentum[0]]))
-
-            # dark matter arrives at detector, assuming azimuthal symmetric
-            # append the time and energy spectrum of the DM.
-            v = dm_momentum[1:] / dm_momentum[0] * c_light
-            a = np.sum(v ** 2)
-            b = 2 * np.sum(v)
-            c = np.sum(pos ** 2) - self.det_dist ** 2
-            if b ** 2 - 4 * a * c >= 0:
-                t_dm = (-b + np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
-                if t_dm >= 0 and self.det_direc - self.det_width / 2 <= \
-                    (pos[2] + v[2] * t_dm) / np.sqrt(
-                    np.sum((v * t_dm + pos) ** 2)) <= self.det_direc + self.det_width / 2:
-                    if self.verbose:
-                        print("adding weight", dp_wgt)
-                    self.time.append(t+t_dm)
-                    self.energy.append(dm_momentum[0])
-                    self.weight.append(dp_wgt)
-                t_dm = (-b - np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
-                if t_dm >= 0 and self.det_direc - self.det_width / 2 <= \
-                    (pos[2] + v[2] * t_dm) / np.sqrt(
-                    np.sum((v * t_dm + pos) ** 2)) <= self.det_direc + self.det_width / 2:
-                    if self.verbose:
-                        print("adding weight", dp_wgt)
-                    self.time.append(t+t_dm)
-                    self.energy.append(dm_momentum[0])
-                    self.weight.append(dp_wgt)
-            v = (dp_momentum - dm_momentum)[1:] / (dp_momentum - dm_momentum)[0] * c_light
-            a = np.sum(v ** 2)
-            b = 2 * np.sum(v)
-            c = np.sum(pos ** 2) - self.det_dist ** 2
-            if b ** 2 - 4 * a * c >= 0:
-                t_dm = (-b + np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
-                if t_dm >= 0 and self.det_direc - self.det_width / 2 <= \
-                    (pos[2] + v[2] * t_dm) / np.sqrt(
-                    np.sum((v * t_dm + pos) ** 2)) <= self.det_direc + self.det_width / 2:
-                    if self.verbose:
-                        print("adding weight", dp_wgt)
-                    self.time.append(t+t_dm)
-                    self.energy.append((dp_momentum - dm_momentum)[0])
-                    self.weight.append(dp_wgt)
-                t_dm = (-b - np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
-                if t_dm >= 0 and self.det_direc - self.det_width / 2 <= \
-                    (pos[2] + v[2] * t_dm) / np.sqrt(
-                    np.sum((v * t_dm + pos) ** 2)) <= self.det_direc + self.det_width / 2:
-                    if self.verbose:
-                        print("adding weight", dp_wgt)
-                    self.time.append(t+t_dm)
-                    self.energy.append((dp_momentum - dm_momentum)[0])
-                    self.weight.append(dp_wgt)
-
-
-    def fint(self, er, m):
-        emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_m**2+4*m*self.dm_m**2)/m) + er)
-        res = np.zeros_like(emin)
-        for i in range(emin.shape[0]):
-            res[i] = self.integrate(emin[i], self.ev_max, weight_function=self.f0)
-        return res
-
-    def fint1(self, er, m):
-        emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_m**2+4*m*self.dm_m**2)/m) + er)
-        res = np.zeros_like(emin)
-        for i in range(emin.shape[0]):
-            res[i] = self.integrate(emin[i], self.ev_max, weight_function=self.f1)
-        return res
-
-    def fint2(self, er, m):
-        emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_m**2+4*m*self.dm_m**2)/m) + er)
-        res = np.zeros_like(emin)
-        for i in range(emin.shape[0]):
-            res[i] = self.integrate(emin[i], self.ev_max, weight_function=self.f2)
-        return res
-
-    def f0(self, ev):
-        return 1/(ev**2 - self.dm_m**2)
-
-    def f1(self, ev):
-        return ev/(ev**2 - self.dm_m**2)
-
-    def f2(self, ev):
-        return ev**2 / (ev**2 - self.dm_m**2)
 
 
 class NeutrinoFlux:
@@ -944,12 +629,358 @@ class NeutrinoFlux:
         pass
 
 
+
+class DMFlux:
+    """
+    Dark matter flux at COHERENT
+    """
+    def __init__(self, dark_photon_mass, life_time, coupling_quark, dark_matter_mass,
+                 detector_distance=19.3, pot_mu=0.75, pot_sigma=0.25, size=100000):
+        """
+        initialize and generate flux
+        :param dark_photon_mass: dark photon mass
+        :param life_time: life time of dark photon in rest frame, unit in micro second
+        :param coupling_quark: dark photon coupling to quarks
+        :param dark_matter_mass: mass of dark matter, unit in MeV
+        :param detector_distance: distance from the detector to the Hg target
+        :param pot_mu: mean of guassian distribution of proton on target, unit in micro second
+        :param pot_sigma: std of guassian distribution of proton on target, unit in micro second
+        :param size: size of sampling dark photons
+        """
+        self.dp_m = dark_photon_mass
+        self.dm_m = dark_matter_mass
+        self.epsi_quark = coupling_quark
+        self.det_dist = detector_distance / meter_by_mev
+        self.dp_life = life_time * 1e-6 * c_light / meter_by_mev
+        self.pot_mu = pot_mu * 1e-6 * c_light / meter_by_mev
+        self.pot_sigma = pot_sigma * 1e-6 * c_light / meter_by_mev
+        self.timing, self.energy = self._generate(size)
+        self.ed_min = self.energy.min()
+        self.ed_max = self.energy.max()
+        self.dm_norm = self.epsi_quark**2*0.23*1e20 / (4*np.pi*(detector_distance**2)*24*3600) * (meter_by_mev**2) * \
+            self.timing.shape[0] * 2 / size
+
+    def _generate(self, size=1000000):
+        """
+        generate dark matter flux at COHERENT
+        :param size: size of sampling dark photons
+        :return: time and energy histogram of dark matter
+        """
+        dp_m = self.dp_m
+        dp_e = ((massofpi+massofp)**2 - massofn**2 + dp_m**2)/(2*(massofpi+massofp))
+        dp_p = np.sqrt(dp_e ** 2 - dp_m ** 2)
+        dp_v = dp_p / dp_e
+        gamma = dp_e / dp_m
+        tau = self.dp_life * gamma
+        tf = np.random.normal(self.pot_mu, self.pot_sigma, size)  # POT
+        t = np.random.exponential(tau, size)  # life time of each dark photon
+        cs = np.random.uniform(-1, 1, size)  # direction of each dark photon
+        # in rest frame
+        estar = dp_m / 2
+        pstar = np.sqrt(estar ** 2 - self.dm_m ** 2)
+        pstarx = pstar * cs
+        pstary = pstar * np.sqrt(1 - cs ** 2)
+        # boost to lab frame
+        elab = gamma * (estar + dp_v * pstarx)
+        plabx = gamma * (pstarx + dp_v * estar)
+        plaby = pstary
+        vx = plabx / elab
+        vy = plaby / elab
+        timing = []
+        energy = []
+        for i in range(size):
+            a = vx[i] ** 2 + vy[i] ** 2
+            b = 2 * vx[i] * t[i] * dp_v
+            cc = dp_v ** 2 * t[i] ** 2 - self.det_dist ** 2
+            if b ** 2 - 4 * a * cc >= 0:
+                if (-b - np.sqrt(b ** 2 - 4 * a * cc)) / (2 * a) > 0:
+                    timing.append((-b - np.sqrt(b ** 2 - 4 * a * cc)) / (2 * a) + t[i] + tf[i])
+                    energy.append(elab[i])
+                if (-b + np.sqrt(b ** 2 - 4 * a * cc)) / (2 * a) > 0:
+                    timing.append((-b + np.sqrt(b ** 2 - 4 * a * cc)) / (2 * a) + t[i] + tf[i])
+                    energy.append(elab[i])
+        return np.array(timing) / c_light * meter_by_mev * 1e6, np.array(energy)
+
+    def flux(self, ev):
+        """
+        dark matter flux
+        :param ev: dark matter energy
+        :return: dark matter flux
+        """
+        return 1/(self.ed_max-self.ed_min)*self.dm_norm if self.ed_min <= ev <= self.ed_max else 0
+
+    def fint(self, er, m, **kwargs):
+        """
+        flux/(ex^2-mx^2) integration
+        :param er: recoil energy in MeV
+        :param m: target nucleus mass in MeV
+        :param kwargs: other argument
+        :return: flux/(ex^2-mx^2) integration
+        """
+        emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_m**2+4*m*self.dm_m**2)/m) + er)
+
+        def integrand(ex):
+            return self.flux(ex)/(ex**2 - self.dm_m**2)
+
+        if not isinstance(emin, np.ndarray):
+            res = quad(integrand, emin, self.ed_max)[0]
+        else:
+            res = np.zeros_like(emin)
+            for i in range(emin.shape[0]):
+                res[i] = quad(integrand, emin[i], self.ed_max)[0]
+        return res
+
+    def fint1(self, er, m, **kwargs):
+        """
+        flux*ex/(ex^2-mx^2) integration
+        :param er: recoil energy in MeV
+        :param m: target nucleus mass in MeV
+        :param kwargs: other argument
+        :return: flux*ex/(ex^2-mx^2) integration
+        """
+        emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_m**2+4*m*self.dm_m**2)/m) + er)
+
+        def integrand(ex):
+            return self.flux(ex) * ex / (ex ** 2 - self.dm_m ** 2)
+
+        if not isinstance(emin, np.ndarray):
+            res = quad(integrand, emin, self.ed_max)[0]
+        else:
+            res = np.zeros_like(emin)
+            for i in range(emin.shape[0]):
+                res[i] = quad(integrand, emin[i], self.ed_max)[0]
+        return res
+
+    def fint2(self, er, m, **kwargs):
+        """
+        flux*ex^2/(ex^2-mx^2) integration
+        :param er: recoil energy in MeV
+        :param m: target nucleus mass in MeV
+        :param kwargs: other argument
+        :return: flux*ex^2/(ex^2-mx^2) integration
+        """
+        emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_m**2+4*m*self.dm_m**2)/m) + er)
+
+        def integrand(ex):
+            return self.flux(ex) * ex**2 / (ex ** 2 - self.dm_m ** 2)
+
+        if not isinstance(emin, np.ndarray):
+            res = quad(integrand, emin, self.ed_max)[0]
+        else:
+            res = np.zeros_like(emin)
+            for i in range(emin.shape[0]):
+                res[i] = quad(integrand, emin[i], self.ed_max)[0]
+        return res
+
+
+
+class DMFluxIsoPhoton(FluxBaseContinuous):
+    def __init__(self, photon_distribution, dark_photon_mass, coupling, dark_matter_mass, life_time=None,
+                 detector_distance=19.3, pot_rate=5e20, pot_sample=100000, brem_suppress=False,
+                 pot_mu=0.7, pot_sigma=0.15, sampling_size=100, nbins=20, verbose=False):
+        self.nbins = nbins
+        self.photon_flux = photon_distribution
+        self.dp_m = dark_photon_mass
+        self.dm_m = dark_matter_mass
+        self.epsilon = coupling
+        self.life_time = self.get_lifetime(coupling, dark_photon_mass)
+        if life_time is not None:
+            self.life_time = life_time * 1e-6
+        self.det_dist = detector_distance  # meters
+        self.pot_rate = pot_rate  # the number of POT/day in the experiment
+        self.pot_mu = pot_mu
+        self.pot_sigma = pot_sigma
+        self.pot_sample = pot_sample  # the number of POT corresponding to the supplied photon_distribution sample
+        self.time = []
+        self.dm_time = []
+        self.dp_time = []
+        self.energy = []
+        self.weight = []
+        self.norm = 1
+        self.sampling_size = sampling_size
+        self.supp = brem_suppress  # whether we add a suppression factor for Bremsstrahlung dark photon production phase space
+        self.verbose = verbose
+        for photon_events in photon_distribution:
+            if self.verbose:
+                print("getting photons from E =", photon_events[0], "Size =", photon_events[1])
+            self._generate_single(photon_events, self.sampling_size)
+
+        self.timing = np.array(self.time) * 1e6
+        self.dm_timing = np.array(self.dm_time) * 1e6
+        self.dp_timing = np.array(self.dp_time) * 1e6
+        normalization = self.epsilon ** 2 * (self.pot_rate / self.pot_sample) \
+                        / (4 * np.pi * (self.det_dist ** 2) * 24 * 3600) * (meter_by_mev**2)
+        self.norm = normalization
+        self.weight = [x * self.norm for x in self.weight]
+
+        hist, bin_edges = np.histogram(self.energy, bins=nbins, weights=self.weight, density=True)
+        super().__init__((bin_edges[:-1] + bin_edges[1:]) / 2, hist, norm=np.sum(self.weight))
+
+    def get_lifetime(self, g, m):
+        return ((16 * np.pi ** 2) / ((g ** 2) * m)) * mev_per_hz
+
+    def getScaledWeights(self):
+        wgt = self.weight
+        wgt = [x * self.norm * 24 * 3600 / (meter_by_mev**2) for x in wgt]
+        return wgt
+
+    def simulate(self):
+        self.time = []
+        self.dm_time = []
+        self.dp_time = []
+        self.energy = []
+        self.weight = []
+        for photon_events in self.photon_flux:
+            if self.verbose:
+                print("getting photons from E =", photon_events[0], "Size =", photon_events[1])
+            self._generate_single(photon_events, self.sampling_size)
+
+        self.timing = np.array(self.time) * 1e6
+        self.dm_timing = np.array(self.dm_time) * 1e6
+        self.dp_timing = np.array(self.dp_time) * 1e6
+        normalization = self.epsilon ** 2 * (self.pot_rate / self.pot_sample) \
+                        / (4 * np.pi * (self.det_dist ** 2) * 24 * 3600) * (meter_by_mev**2)
+        self.norm = normalization
+        self.weight = [x * self.norm for x in self.weight]
+        hist, bin_edges = np.histogram(self.energy, bins=self.nbins, weights=self.weight, density=True)
+        super().__init__((bin_edges[:-1] + bin_edges[1:]) / 2, hist, norm=np.sum(self.weight))
+
+    def _generate_single(self, photon_events, nsamples):
+        # Initiate photon position, energy and momentum.
+        if photon_events[0]**2 < self.dp_m**2:
+            return
+        dp_m = self.dp_m
+        dp_e = photon_events[0]
+        dp_p = np.sqrt(dp_e ** 2 - self.dp_m ** 2)
+        dp_momentum = np.array([dp_e, 0, 0, dp_p])
+
+
+        # dark photon to dark matter
+        dm_m = self.dm_m
+        dm_e = self.dp_m / 2
+        dm_p = np.sqrt(dm_e ** 2 - dm_m ** 2)
+
+        # Directional sampling.
+        dp_wgt = photon_events[1] / nsamples  # Event weight
+        # Brem suppression
+        if self.supp == True:
+            el_e = 1.0773*dp_e + 13.716  # most likely electron energy that produced this dark photon
+            supp_fact = min(1, 1154 * np.exp(-24.42 * np.power(dp_m/el_e, 0.3174)))
+            dp_wgt *= supp_fact
+        for i in range(0, nsamples):
+            t = 0
+            pos = np.zeros(3)
+            t += np.random.normal(self.pot_mu * 1e-6, self.pot_sigma * 1e-6)
+            t_dp = np.random.exponential(self.life_time * dp_momentum[0] / dp_m)
+            pos += c_light * t_dp * np.array(
+                [dp_momentum[1] / dp_momentum[0], dp_momentum[2] / dp_momentum[0], dp_momentum[3] / dp_momentum[0]])
+            t += t_dp
+            csd = np.random.uniform(-1, 1)
+            phid = np.random.uniform(0, 2 * np.pi)
+            dm_momentum = np.array([dm_e, dm_p * np.sqrt(1 - csd ** 2) * np.cos(phid),
+                                    dm_p * np.sqrt(1 - csd ** 2) * np.sin(phid), dm_p * csd])
+            dm_momentum = lorentz_boost(dm_momentum,
+                                        np.array([-dp_momentum[1] / dp_momentum[0],
+                                                  -dp_momentum[2] / dp_momentum[0],
+                                                  -dp_momentum[3] / dp_momentum[0]]))
+
+            # dark matter arrives at detector, assuming azimuthal symmetric
+            # append the time and energy spectrum of the DM.
+            # DM particle 1
+            v = dm_momentum[1:] / dm_momentum[0] * c_light
+            a = np.sum(v ** 2)
+            b = 2 * np.sum(v*pos) #2 * v[2] * (c_light * dp_p / dp_e) * t_dp
+            c = np.sum(pos ** 2) - self.det_dist ** 2
+            if b ** 2 - 4 * a * c >= 0:
+                t_dm = (-b - np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
+                if t_dm >= 0:
+                    if self.verbose:
+                        print("adding weight", dp_wgt)
+                    self.time.append(t+t_dm)
+                    self.dm_time.append(t_dm)
+                    self.dp_time.append(t_dp)
+                    self.energy.append(dm_momentum[0])
+                    self.weight.append(dp_wgt)
+                t_dm = (-b + np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
+                if t_dm >= 0:
+                    if self.verbose:
+                        print("adding weight", dp_wgt)
+                    self.time.append(t+t_dm)
+                    self.dm_time.append(t_dm)
+                    self.dp_time.append(t_dp)
+                    self.energy.append(dm_momentum[0])
+                    self.weight.append(dp_wgt)
+            # DM particle 2
+            v = (dp_momentum - dm_momentum)[1:] / (dp_momentum - dm_momentum)[0] * c_light
+            a = np.sum(v ** 2)
+            b = 2 * np.sum(v*pos) #2 * v[2] * (c_light * dp_p / dp_e) * t_dp 
+            c = np.sum(pos ** 2) - self.det_dist ** 2
+            if b ** 2 - 4 * a * c >= 0:
+                t_dm = (-b - np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
+                if t_dm >= 0:
+                    if self.verbose:
+                        print("adding weight", dp_wgt)
+                    self.time.append(t+t_dm)
+                    self.dm_time.append(t_dm)
+                    self.dp_time.append(t_dp)
+                    self.energy.append((dp_momentum - dm_momentum)[0])
+                    self.weight.append(dp_wgt)
+                t_dm = (-b + np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
+                if t_dm >= 0:
+                    if self.verbose:
+                        print("adding weight", dp_wgt)
+                    self.time.append(t+t_dm)
+                    self.dm_time.append(t_dm)
+                    self.dp_time.append(t_dp)
+                    self.energy.append((dp_momentum - dm_momentum)[0])
+                    self.weight.append(dp_wgt)
+
+
+    def fint(self, er, m):
+        if np.isscalar(m):
+            m = np.array([m])
+        emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_m**2+4*m*self.dm_m**2)/m) + er)
+        res = np.zeros_like(emin)
+        for i in range(emin.shape[0]):
+            res[i] = self.integrate(emin[i], self.ev_max, weight_function=self.f0)
+        return res
+
+    def fint1(self, er, m):
+        if np.isscalar(m):
+            m = np.array([m])
+        emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_m**2+4*m*self.dm_m**2)/m) + er)
+        res = np.zeros_like(emin)
+        for i in range(emin.shape[0]):
+            res[i] = self.integrate(emin[i], self.ev_max, weight_function=self.f1)
+        return res
+
+    def fint2(self, er, m):
+        if np.isscalar(m):
+            m = np.array([m])
+        emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_m**2+4*m*self.dm_m**2)/m) + er)
+        res = np.zeros_like(emin)
+        for i in range(emin.shape[0]):
+            res[i] = self.integrate(emin[i], self.ev_max, weight_function=self.f2)
+        return res
+
+    def f0(self, ev):
+        return 1/(ev**2 - self.dm_m**2)
+
+    def f1(self, ev):
+        return ev/(ev**2 - self.dm_m**2)
+
+    def f2(self, ev):
+        return ev**2 / (ev**2 - self.dm_m**2)
+
+
+
 class DMFluxFromPiMinusAbsorption:
     r"""
     Dark matter flux from pi^- + p -> A^\prime + n -> \chi + \chi + n
     """
-    def __init__(self, dark_photon_mass, life_time, coupling_quark, dark_matter_mass,
-                 detector_distance=19.3, pot_rate=5e20, pot_mu=0.7, pot_sigma=0.15, pion_rate=18324/500000, sampling_size=100000):
+    def __init__(self, dark_photon_mass, coupling_quark, dark_matter_mass, life_time=None,
+                 detector_distance=19.3, pot_rate=5e20, pot_mu=0.7, pot_sigma=0.15, pion_rate=18324/500000,
+                 sampling_size=100000):
         """
         initialize and generate flux
         default values are COHERENT experiment values
@@ -964,42 +995,53 @@ class DMFluxFromPiMinusAbsorption:
         :param pion_rate: pi^- production rate
         :param sampling_size: size of sampling dark photons
         """
-        self.dp_mass = dark_photon_mass
-        self.dm_mass = dark_matter_mass
+        self.dp_m = dark_photon_mass
         self.dm_m = dark_matter_mass
         self.epsi_quark = coupling_quark
         self.det_dist = detector_distance / meter_by_mev
-        self.dp_life = life_time * 1e-6 * c_light / meter_by_mev
-        self.mu = pot_mu * 1e-6 * c_light / meter_by_mev
-        self.sigma = pot_sigma * 1e-6 * c_light / meter_by_mev
+        self.dp_life = self.get_lifetime(coupling_quark, dark_photon_mass) * c_light / meter_by_mev
+        if life_time is not None:
+            self.dp_life = life_time * 1e-6 * c_light / meter_by_mev
+        self.pot_mu = pot_mu
+        self.pot_sigma = pot_sigma
         self.pot_rate = pot_rate
         self.pion_rate = pion_rate
         self.sampling_size = sampling_size
-        self.timing = None
-        self.energy = None
+        self.timing = []
+        self.dm_timing = []
+        self.dp_timing = []
+        self.energy = []
         self.ed_min = None
         self.ed_max = None
         self.norm = None
-        self._generate()
+        self.simulate()
         self.ev_min = self.ed_min
         self.ev_max = self.ed_max
 
-    def _generate(self):
+    def get_lifetime(self, g, m):
+        return ((16 * np.pi ** 2) / ((g ** 2) * m)) * mev_per_hz
+
+    def simulate(self):
         """
         generate dark matter flux
         """
-        dp_m = self.dp_mass
+        # First check that the dp mass is less than the pi- mass.
+        if self.dp_m > massofpi:
+            return
+        dp_m = self.dp_m
         dp_e = ((massofpi + massofp) ** 2 - massofn ** 2 + dp_m ** 2) / (2 * (massofpi + massofp))
         dp_p = np.sqrt(dp_e ** 2 - dp_m ** 2)
         dp_v = dp_p / dp_e
         gamma = dp_e / dp_m
         tau = self.dp_life * gamma
-        tf = np.random.normal(self.mu, self.sigma, self.sampling_size)  # POT
+        tf = np.random.normal(self.pot_mu * 1e-6 * c_light / meter_by_mev,
+                              self.pot_sigma * 1e-6 * c_light / meter_by_mev,
+                              self.sampling_size)  # POT
         t = np.random.exponential(tau, self.sampling_size)  # life time of each dark photon
         cs = np.random.uniform(-1, 1, self.sampling_size)  # direction of each dark photon
         # in rest frame
         estar = dp_m / 2
-        pstar = np.sqrt(estar ** 2 - self.dm_mass ** 2)
+        pstar = np.sqrt(estar ** 2 - self.dm_m ** 2)
         pstarx = pstar * cs
         pstary = pstar * np.sqrt(1 - cs ** 2)
         # boost to lab frame
@@ -1009,22 +1051,31 @@ class DMFluxFromPiMinusAbsorption:
         vx = plabx / elab
         vy = plaby / elab
         timing = []
+        dm_timing = []
+        dp_timing = []
         energy = []
         for i in range(self.sampling_size):
+            dp_timing.append(t[i])
             a = vx[i] ** 2 + vy[i] ** 2
             b = 2 * vx[i] * t[i] * dp_v
             cc = dp_v ** 2 * t[i] ** 2 - self.det_dist ** 2
             if b ** 2 - 4 * a * cc >= 0:
                 if (-b - np.sqrt(b ** 2 - 4 * a * cc)) / (2 * a) > 0:
                     timing.append((-b - np.sqrt(b ** 2 - 4 * a * cc)) / (2 * a) + t[i] + tf[i])
+                    dm_timing.append((-b - np.sqrt(b ** 2 - 4 * a * cc)) / (2 * a))
                     energy.append(elab[i])
                 if (-b + np.sqrt(b ** 2 - 4 * a * cc)) / (2 * a) > 0:
                     timing.append((-b + np.sqrt(b ** 2 - 4 * a * cc)) / (2 * a) + t[i] + tf[i])
+                    dm_timing.append((-b + np.sqrt(b ** 2 - 4 * a * cc)) / (2 * a))
                     energy.append(elab[i])
         self.timing = np.array(timing) / c_light * meter_by_mev * 1e6
+        self.dm_timing = np.array(dm_timing) / c_light * meter_by_mev * 1e6
+        self.dp_timing = np.array(dp_timing) / c_light * meter_by_mev * 1e6
         self.energy = np.array(energy)
         self.ed_min = min(energy)
         self.ed_max = max(energy)
+        self.ev_min = self.ed_min
+        self.ev_max = self.ed_max
         self.norm = self.epsi_quark ** 2 * self.pot_rate * self.pion_rate / (4 * np.pi * (self.det_dist ** 2) * 24 * 3600) * \
                     self.timing.shape[0] * 2 / self.sampling_size
 
@@ -1054,17 +1105,44 @@ class DMFluxFromPiMinusAbsorption:
 
     def change_parameters(self, dark_photon_mass=None, life_time=None, coupling_quark=None, dark_matter_mass=None,
                           detector_distance=None, pot_rate=None, pot_mu=None, pot_sigma=None, pion_rate=None, sampling_size=None):
-        self.dp_mass = dark_photon_mass if dark_photon_mass is not None else self.dp_mass
+        self.dp_m = dark_photon_mass if dark_photon_mass is not None else self.dp_m
         self.dp_life = life_time * 1e-6 * c_light / meter_by_mev if life_time is not None else self.dp_life
         self.epsi_quark = coupling_quark if coupling_quark is not None else self.epsi_quark
-        self.dm_mass = dark_matter_mass if dark_matter_mass is not None else self.dm_mass
+        self.dm_m = dark_matter_mass if dark_matter_mass is not None else self.dm_m
         self.det_dist = detector_distance / meter_by_mev if detector_distance is not None else self.det_dist
         self.pot_rate = pot_rate if pot_rate is not None else self.pot_rate
-        self.mu = pot_mu * 1e-6 * c_light / meter_by_mev if pot_mu is not None else self.mu
-        self.sigma = pot_sigma * 1e-6 * c_light / meter_by_mev if pot_sigma is not None else self.sigma
+        self.pot_mu = pot_mu * 1e-6 * c_light / meter_by_mev if pot_mu is not None else self.pot_mu
+        self.pot_sigma = pot_sigma * 1e-6 * c_light / meter_by_mev if pot_sigma is not None else self.pot_sigma
         self.pion_rate = self.pion_rate if pion_rate is not None else self.pion_rate
         self.sampling_size = sampling_size if sampling_size is not None else self.sampling_size
-        self._generate()
+        self.simulate()
+
+    def fint(self, er, m):
+        if np.isscalar(m):
+            m = np.array([m])
+        emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_m**2+4*m*self.dm_m**2)/m) + er)
+        res = np.zeros_like(emin)
+        for i in range(emin.shape[0]):
+            res[i] = self.integrate(emin[i], self.ev_max, weight_function=self.f0)
+        return res
+
+    def fint1(self, er, m):
+        if np.isscalar(m):
+            m = np.array([m])
+        emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_m**2+4*m*self.dm_m**2)/m) + er)
+        res = np.zeros_like(emin)
+        for i in range(emin.shape[0]):
+            res[i] = self.integrate(emin[i], self.ev_max, weight_function=self.f1)
+        return res
+
+    def fint2(self, er, m):
+        if np.isscalar(m):
+            m = np.array([m])
+        emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_m**2+4*m*self.dm_m**2)/m) + er)
+        res = np.zeros_like(emin)
+        for i in range(emin.shape[0]):
+            res[i] = self.integrate(emin[i], self.ev_max, weight_function=self.f2)
+        return res
 
     def f0(self, ev):
         return 1/(ev**2 - self.dm_m**2)
@@ -1076,120 +1154,62 @@ class DMFluxFromPiMinusAbsorption:
         return ev**2 / (ev**2 - self.dm_m**2)
 
 
-class NeutrinoFluxFactory:
-    def __init__(self):
-        self.flux_list = ['solar', 'solar_b8', 'solar_f17', 'solar_hep', 'solar_n13', 'solar_o15', 'solar_pp',
-                          'solar_pep', 'solar_be7', 'coherent', 'coherent_prompt', 'coherent_delayed',
-                          'far_beam_nu', 'far_beam_nubar', 'atmospheric']
-
-    def print_available(self):
-        print(self.flux_list)
-
-    def get(self, flux_name, **kwargs):
-        if flux_name not in self.flux_list:
-            print('flux name not in current list: ', self.flux_list)
-            raise Exception('flux not found.')
-        if flux_name in ['solar_b8', 'solar_f17', 'solar_hep', 'solar_n13', 'solar_o15', 'solar_pp']:
-            f = np.genfromtxt(pkg_resources.resource_filename(__name__, 'data/' + flux_name[6:] + '.csv'), delimiter=',')
-            return NeutrinoFlux(continuous_fluxes={'ev': f[:, 0], 'e': f[:, 1]})
-        if flux_name == 'solar':
-            f = np.genfromtxt(pkg_resources.resource_filename(__name__, 'data/' + flux_name + '.csv'), delimiter=',')
-            return NeutrinoFlux(continuous_fluxes={'ev': f[:, 0], 'e': f[:, 1]}, delta_fluxes={'e': [(1.439, 1.44e8), (0.8613, 5e9)]})
-        if flux_name == 'pep':
-            return NeutrinoFlux(delta_fluxes={'e': [(1.439, 1.44e8), ]})
-        if flux_name == 'be7':
-            return NeutrinoFlux(delta_fluxes={'e': [(0.8613, 5e9), ]})
-        if flux_name == 'coherent':
-            def de(evv):
-                return (3 * ((evv / (2 / 3 * 52)) ** 2) - 2 * ((evv / (2 / 3 * 52)) ** 3)) / 29.25
-            def dmubar(evv):
-                return (3 * ((evv / 52) ** 2) - 2 * ((evv / 52) ** 3)) / 26
-            ev = np.linspace(0.001, 52, 100)
-            return NeutrinoFlux(continuous_fluxes={'ev': ev, 'e': de(ev), 'mubar': dmubar(ev)},
-                                delta_fluxes={'mu': [(29, 1)]}, norm=1.13 * (10 ** 7)) ## default unit is /(cm^2*s)
-        if flux_name == 'coherent_delayed':
-            def de(evv):
-                return (3 * ((evv / (2 / 3 * 52)) ** 2) - 2 * ((evv / (2 / 3 * 52)) ** 3)) / 29.25
-            def dmubar(evv):
-                return (3 * ((evv / 52) ** 2) - 2 * ((evv / 52) ** 3)) / 26
-            ev = np.linspace(0.001, 52, kwargs['npoints'] if 'npoints' in kwargs else 100)
-            return NeutrinoFlux(continuous_fluxes={'ev': ev, 'e': de(ev), 'mubar': dmubar(ev)}, norm=1.13 * (10 ** 7))
-        if flux_name == 'coherent_prompt':
-            return NeutrinoFlux(delta_fluxes={'mu': [(29, 1)]}, norm=1.13 * (10 ** 7))
-        if flux_name == 'far_beam_nu':
-            far_beam_txt = 'data/dune_beam_fd_nu_flux_120GeVoptimized.txt'
-            f_beam = np.genfromtxt(pkg_resources.resource_filename(__name__, far_beam_txt), delimiter=',')
-            nu = {'ev': f_beam[:, 0],
-                  'e': f_beam[:, 2],
-                  'mu': f_beam[:, 3],
-                  'ebar': f_beam[:, 5],
-                  'mubar': f_beam[:, 6]}
-            return NeutrinoFlux(continuous_fluxes=nu)
-        if flux_name == 'far_beam_nubar':
-            far_beam_txt = 'data/dune_beam_fd_antinu_flux_120GeVoptimized.txt'
-            f_beam = np.genfromtxt(pkg_resources.resource_filename(__name__, far_beam_txt), delimiter=',')
-            nu = {'ev': f_beam[:, 0],
-                  'e': f_beam[:, 2],
-                  'mu': f_beam[:, 3],
-                  'ebar': f_beam[:, 5],
-                  'mubar': f_beam[:, 6]}
-            return NeutrinoFlux(continuous_fluxes=nu)
-        if flux_name == 'atmospheric':
-            if 'zenith' not in kwargs:
-                raise Exception('please specify zenith angle')
-            zen = np.round(kwargs['zenith'], decimals=3)
-            zen_list = np.round(np.linspace(-0.975, 0.975, 40), decimals=3)
-            if zen not in zen_list:
-                print('available choice of zenith angle: ', zen_list)
-                raise Exception('zenith angle not available')
-            idx = (0.975 - zen) / 0.05 * 61
-            f_atmos = np.genfromtxt(pkg_resources.resource_filename(__name__, 'data/atmos.txt'), delimiter=',')
-            nu = {'ev': f_atmos[int(round(idx)):int(round(idx))+61, 0],
-                  'e': f_atmos[int(round(idx)):int(round(idx))+61, 2],
-                  'mu': f_atmos[int(round(idx)):int(round(idx))+61, 3],
-                  'ebar': f_atmos[int(round(idx)):int(round(idx))+61, 5],
-                  'mubar': f_atmos[int(round(idx)):int(round(idx))+61, 6]}
-            return NeutrinoFlux(continuous_fluxes=nu)
-
-
-def _invs(ev):
-    return 1/ev**2
-
 
 class DMFluxFromPi0Decay(FluxBaseContinuous):
     """
     z direction is the direction of the beam
     """
-    def __init__(self, pi0_distribution, dark_photon_mass, life_time, coupling_quark, dark_matter_mass,
-                 detector_distance=19.3, detector_direction=0, detector_width=0.1, pot_rate=5e20, pot_mu=0.7, pot_sigma=0.15,
-                 pion_rate=52935/500000, nbins=50):
+    def __init__(self, pi0_distribution, dark_photon_mass, coupling_quark, dark_matter_mass, life_time=None,
+                 detector_distance=19.3, detector_direction=0, detector_width=0.1, pot_rate=5e20, pot_mu=0.7,
+                 pot_sigma=0.15, pion_rate=52935/500000, nbins=20):
+        self.pi0_distribution = pi0_distribution
         self.dp_m = dark_photon_mass
-        self.life_time = life_time * 1e-6
+        self.life_time = self.get_lifetime(coupling_quark, dark_photon_mass)
+        if life_time is not None:
+            self.life_time = life_time * 1e-6
         self.epsilon = coupling_quark
         self.dm_m = dark_matter_mass
         self.det_dist = detector_distance
         self.det_direc = detector_direction
         self.det_width = detector_width
         self.pot_rate = pot_rate
-        self.pot_mu = pot_mu * 1e-6
-        self.pot_sigma = pot_sigma * 1e-6
+        self.pot_mu = pot_mu
+        self.pot_sigma = pot_sigma
         self.pion_rate = pion_rate
         self.time = []
         self.energy = []
-        self.dm_mass = dark_matter_mass
-        for pi0_events in pi0_distribution:
-            self._simulate_dm_events(pi0_events)
+        self.nbins = nbins
+        self.dm_m = dark_matter_mass
+        for pi0_events in pi0_distribution:  # must be in the form [azimuth, cos(zenith), kinetic energy]
+            self._generate_single(pi0_events)
         self.timing = np.array(self.time)*1e6
         hist, bin_edges = np.histogram(self.energy, bins=nbins, density=True)
         super().__init__((bin_edges[:-1]+bin_edges[1:])/2, hist,
                          norm=self.epsilon**2*pot_rate*pion_rate*len(self.time)/len(pi0_distribution)/
                               (2*np.pi*(min(1.0, detector_direction+detector_width/2)-max(-1.0, detector_direction-detector_width/2))*detector_distance**2*24*3600)
                               *(meter_by_mev**2))
+    
+    def get_lifetime(self, g, m):
+        return ((16 * np.pi ** 2) / ((g ** 2) * m)) * mev_per_hz
+    
+    def simulate(self):
+        self.time = []
+        self.energy = []
+        for pi0_events in self.pi0_distribution:  # must be in the form [azimuth, cos(zenith), kinetic energy]
+            self._generate_single(pi0_events)
+        self.timing = np.array(self.time)*1e6
+        hist, bin_edges = np.histogram(self.energy, bins=self.nbins, density=True)
+        norm = self.epsilon**2 * self.pot_rate * self.pion_rate * \
+            len(self.time)/len(self.pi0_distribution)/ \
+                (2*np.pi*(min(1.0, self.det_direc+self.det_width/2)-max(-1.0, self.det_direc-self.det_width/2))*self.det_dist**2*24*3600)*(meter_by_mev**2)
+        super().__init__((bin_edges[:-1]+bin_edges[1:])/2, hist, norm=norm)
 
-    def _simulate_dm_events(self, pi0_events):
+    def _generate_single(self, pi0_events):
+        if self.dp_m > massofpi0:
+            return
         pos = np.zeros(3)
         t = 0
-        t += np.random.normal(self.pot_mu, self.pot_sigma)
+        t += np.random.normal(self.pot_mu * 1e-6, self.pot_sigma * 1e-6)
         pi_e = massofpi0 + pi0_events[2]
         pi_p = np.sqrt(pi_e**2 - massofpi0**2)
         pi_v = pi_p / pi_e
@@ -1214,34 +1234,34 @@ class DMFluxFromPi0Decay(FluxBaseContinuous):
         csd = np.random.uniform(-1, 1)
         phid = np.random.uniform(0, 2*np.pi)
         dm_momentum = np.array([dm_e, dm_p*np.sqrt(1-csd**2)*np.cos(phid), dm_p*np.sqrt(1-csd**2)*np.sin(phid), dm_p*csd])
-        dm_momentum = lorentz_boost(dm_momentum, np.array([-dp_momentum[1]/dp_momentum[0], -dp_momentum[2]/dp_momentum[0], -dp_momentum[3]/dp_momentum[0]]))
-        # print(lorentz_boost(dm_momentum, np.array([dp_momentum[1]/dp_momentum[0], dp_momentum[2]/dp_momentum[0], dp_momentum[3]/dp_momentum[0]])) +
-        #       lorentz_boost(dp_momentum-dm_momentum, np.array([dp_momentum[1]/dp_momentum[0], dp_momentum[2]/dp_momentum[0], dp_momentum[3]/dp_momentum[0]])))
+        dm_momentum = lorentz_boost(dm_momentum, np.array([-dp_momentum[1]/dp_momentum[0],
+                                                           -dp_momentum[2]/dp_momentum[0],
+                                                           -dp_momentum[3]/dp_momentum[0]]))
         # dark matter arrives at detector, assuming azimuthal symmetric
         v = dm_momentum[1:]/dm_momentum[0]*c_light
         a = np.sum(v**2)
-        b = 2*np.sum(v)
+        b = 2*np.sum(v*pos) #2 * v[2] * (c_light * dp_p / dp_e) * t_dp
         c = np.sum(pos**2) - self.det_dist**2
         if b**2 - 4*a*c >= 0:
             t_dm = (-b+np.sqrt(b**2-4*a*c))/(2*a)
-            if t_dm >= 0 and self.det_direc-self.det_width/2 <= (pos[2]+v[2]*t_dm)/np.sqrt(np.sum((v*t_dm + pos)**2)) <= self.det_direc+self.det_width/2:
+            if t_dm >= 0: #and self.det_direc-self.det_width/2 <= (pos[2]+v[2]*t_dm)/np.sqrt(np.sum((v*t_dm + pos)**2)) <= self.det_direc+self.det_width/2:
                 self.time.append(t+t_dm)
                 self.energy.append(dm_momentum[0])
             t_dm = (-b-np.sqrt(b**2-4*a*c))/(2*a)
-            if t_dm >= 0 and self.det_direc-self.det_width/2 <= (pos[2]+v[2]*t_dm)/np.sqrt(np.sum((v*t_dm + pos)**2)) <= self.det_direc+self.det_width/2:
+            if t_dm >= 0: #and self.det_direc-self.det_width/2 <= (pos[2]+v[2]*t_dm)/np.sqrt(np.sum((v*t_dm + pos)**2)) <= self.det_direc+self.det_width/2:
                 self.time.append(t+t_dm)
                 self.energy.append(dm_momentum[0])
         v = (dp_momentum-dm_momentum)[1:]/(dp_momentum-dm_momentum)[0]*c_light
         a = np.sum(v**2)
-        b = 2*np.sum(v)
+        b = 2*np.sum(v*pos)
         c = np.sum(pos**2) - self.det_dist**2
         if b**2 - 4*a*c >= 0:
             t_dm = (-b+np.sqrt(b**2-4*a*c))/(2*a)
-            if t_dm >= 0 and self.det_direc-self.det_width/2 <= (pos[2]+v[2]*t_dm)/np.sqrt(np.sum((v*t_dm + pos)**2)) <= self.det_direc+self.det_width/2:
+            if t_dm >= 0: #and self.det_direc-self.det_width/2 <= (pos[2]+v[2]*t_dm)/np.sqrt(np.sum((v*t_dm + pos)**2)) <= self.det_direc+self.det_width/2:
                 self.time.append(t+t_dm)
                 self.energy.append((dp_momentum-dm_momentum)[0])
             t_dm = (-b-np.sqrt(b**2-4*a*c))/(2*a)
-            if t_dm >= 0 and self.det_direc-self.det_width/2 <= (pos[2]+v[2]*t_dm)/np.sqrt(np.sum((v*t_dm + pos)**2)) <= self.det_direc+self.det_width/2:
+            if t_dm >= 0: #and self.det_direc-self.det_width/2 <= (pos[2]+v[2]*t_dm)/np.sqrt(np.sum((v*t_dm + pos)**2)) <= self.det_direc+self.det_width/2:
                 self.time.append(t+t_dm)
                 self.energy.append((dp_momentum-dm_momentum)[0])
 
@@ -1249,6 +1269,8 @@ class DMFluxFromPi0Decay(FluxBaseContinuous):
         return pd.DataFrame({'time': self.time, 'energy': self.energy})
 
     def fint(self, er, m):
+        if np.isscalar(m):
+            m = np.array([m])
         emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_m**2+4*m*self.dm_m**2)/m) + er)
         res = np.zeros_like(emin)
         for i in range(emin.shape[0]):
@@ -1256,6 +1278,8 @@ class DMFluxFromPi0Decay(FluxBaseContinuous):
         return res
 
     def fint1(self, er, m):
+        if np.isscalar(m):
+            m = np.array([m])
         emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_m**2+4*m*self.dm_m**2)/m) + er)
         res = np.zeros_like(emin)
         for i in range(emin.shape[0]):
@@ -1263,6 +1287,8 @@ class DMFluxFromPi0Decay(FluxBaseContinuous):
         return res
 
     def fint2(self, er, m):
+        if np.isscalar(m):
+            m = np.array([m])
         emin = 0.5 * (np.sqrt((er**2*m+2*er*m**2+2*er*self.dm_m**2+4*m*self.dm_m**2)/m) + er)
         res = np.zeros_like(emin)
         for i in range(emin.shape[0]):
@@ -1277,3 +1303,4 @@ class DMFluxFromPi0Decay(FluxBaseContinuous):
 
     def f2(self, ev):
         return ev**2 / (ev**2 - self.dm_m**2)
+
