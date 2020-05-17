@@ -14,6 +14,7 @@ mev_per_hz = 6.58e-22  # 1 s^-1 = 6.58e-22 MeV
 ssw = 0.2312  # Sine-squared of the Weinberg angle
 gf = 1.16638e-11  # MeV^-2
 e_charge = 0.303
+kAlpha = 1/137
 cabibbo = 0.9743  # Cosine of the Cabibbo angle
 
 # masses in MeV
