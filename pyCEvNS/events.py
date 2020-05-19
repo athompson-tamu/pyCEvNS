@@ -264,7 +264,7 @@ def rates_dm_electron(er, det: Detector, fx: DMFlux, mediator_mass=None,
     def rates(err):
         if err < det.er_min:
             return 0
-        prefactor = e_charge**4 * epsilon**2 / (4*np.pi * (2*me*err+mediator_mass**2)**2)
+        prefactor = epsilon**2 / (4*np.pi * (2*me*err+mediator_mass**2)**2)
         res = prefactor * np.dot(det.frac, det.z * (2*me*fx.fint2(err, me)
                                             - 2*me*err*fx.fint1(err, me)
                                             - err*(me**2-fx.dm_m**2)*fx.fint(err, me)
@@ -283,7 +283,7 @@ def rates_dm_electron(er, det: Detector, fx: DMFlux, mediator_mass=None,
         return quad(func, 0, 60)[0]
 
 
-def rates_dm(er, det: Detector, fx: DMFlux, mediator_mass=None, epsilon=None, efficiency=None, smear=False, **kwargs):
+def rates_dm_nucleus(er, det: Detector, fx: DMFlux, mediator_mass=None, epsilon=None, efficiency=None, smear=False, **kwargs):
     """
     calculating dark matter scattering rates per nucleus
     :param er: recoil energy in MeV
@@ -302,7 +302,7 @@ def rates_dm(er, det: Detector, fx: DMFlux, mediator_mass=None, epsilon=None, ef
     def rates(err):
         if err < det.er_min:
             return 0
-        res = np.dot(det.frac, e_charge**4 * epsilon**2 * det.z**2 *
+        res = np.dot(det.frac, epsilon**2 * det.z**2 *
                       (2*det.m*fx.fint2(err, det.m) -
                        (err)*2*det.m*fx.fint1(err, det.m) -(det.m**2*err-fx.dm_m**2*err)*fx.fint(err, det.m) +
                        err**2*det.m*fx.fint(err, det.m)) / (4*np.pi*(2*det.m*err+mediator_mass**2)**2) *
@@ -327,7 +327,7 @@ def binned_events_dm(era, erb, expo, det: Detector, fx: DMFlux, mediator_mass=No
     :return: number of nucleus recoil events in the bin [era, erb]
     """
     def rates_nucleus(er):
-        return rates_dm(er, det, fx, mediator_mass, epsilon, efficiency, smear, **kwargs)
+        return rates_dm_nucleus(er, det, fx, mediator_mass, epsilon, efficiency, smear, **kwargs)
     def rates_electron(er):
         return rates_dm_electron(er, det, fx, mediator_mass, epsilon, efficiency, smear, **kwargs)
     if channel == "electron":
