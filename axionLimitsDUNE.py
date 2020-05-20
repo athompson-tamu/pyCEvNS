@@ -50,7 +50,7 @@ bkg = bkg_dru * days * det_mass
 
 
 
-def SandwichSearch(generator, mass_array, g_array):
+def SandwichSearch(generator, mass_array, g_array, savedir):
     upper_array = np.zeros_like(mass_array)
     lower_array = np.ones_like(mass_array)
     print("starting scan...")
@@ -82,7 +82,7 @@ def SandwichSearch(generator, mass_array, g_array):
 
 
     limits_array = [mass_array, lower_array, upper_array]
-    np.savetxt("limits/DUNE/preliminary_limits.txt", limits_array)
+    np.savetxt(savedir, limits_array)
     return limits_array
 
 
@@ -143,33 +143,49 @@ def BinarySearch():
 def main():
     axion_gen_target = IsotropicAxionFromPrimakoff(photon_rates=flux, axion_mass=1, axion_coupling=1e-6,
                                                    target_mass=28e3, target_z=14, target_photon_cross=1e-24,
-                                                   detector_distance=det_dis, detector_length=6)
+                                                   detector_distance=574, detector_length=6)
     axion_gen_dump = IsotropicAxionFromPrimakoff(photon_rates=flux, axion_mass=1, axion_coupling=1e-6,
                                                  target_mass=28e3, target_z=14, target_photon_cross=1e-24,
-                                                 detector_distance=det_dis, detector_length=6)
+                                                 detector_distance=304, detector_length=6)
 
     mass_array = np.logspace(-6, 4, 100)
     g_array = np.logspace(-13, -3, 100)
     rerun = True
     if rerun == True:
       print("Rerunning limits")
-      g_array = SandwichSearch(axion_gen_target, mass_array, g_array)
+      limits_target = SandwichSearch(axion_gen_target, mass_array, g_array, "limits/DUNE/prelim_target_limits.txt")
+      limits_dump = SandwichSearch(axion_gen_dump, mass_array, g_array, "limits/DUNE/prelim_dump_limits.txt")
     else:
-      g_array = np.genfromtxt("limits/DUNE/preliminary_limits.txt")
+      limits_target = np.genfromtxt("limits/DUNE/prelim_target_limits.txt")
+      limits_dump = np.genfromtxt("limits/DUNE/prelim_dump_limits.txt")
 
 
-    upper_limit = g_array[2]
-    lower_limit = g_array[1]
+    upper_limit_target = limits_target[2]
+    lower_limit_target = limits_target[1]
+    upper_limit_dump = limits_dump[2]
+    lower_limit_dump = limits_dump[1]
     
+    # TARGET
     # Find where the upper and lower arrays intersect at the tongue and clip
-    diff_upper_lower = upper_limit - lower_limit
-    upper_limit = np.delete(upper_limit, np.where(diff_upper_lower < 0))
-    lower_limit = np.delete(lower_limit, np.where(diff_upper_lower < 0))
-    mass_array = np.delete(mass_array, np.where(diff_upper_lower < 0))
+    diff_upper_lower = upper_limit_target - lower_limit_target
+    upper_limit_target = np.delete(upper_limit_target, np.where(diff_upper_lower < 0))
+    lower_limit_target = np.delete(lower_limit_target, np.where(diff_upper_lower < 0))
+    mass_array_target = np.delete(mass_array, np.where(diff_upper_lower < 0))
     
     # join upper and lower bounds
-    joined_limits = np.append(lower_limit, upper_limit[::-1])
-    joined_masses = np.append(mass_array, mass_array[::-1])
+    joined_limits_target = np.append(lower_limit_target, upper_limit_target[::-1])
+    joined_masses_target = np.append(mass_array_target, mass_array_target[::-1])
+    
+    # DUMP
+    # Find where the upper and lower arrays intersect at the tongue and clip
+    diff_upper_lower = upper_limit_dump - lower_limit_dump
+    upper_limit_dump = np.delete(upper_limit_dump, np.where(diff_upper_lower < 0))
+    lower_limit_dump = np.delete(lower_limit_dump, np.where(diff_upper_lower < 0))
+    mass_array_dump = np.delete(mass_array, np.where(diff_upper_lower < 0))
+    
+    # join upper and lower bounds
+    joined_limits_dump = np.append(lower_limit_dump, upper_limit_dump[::-1])
+    joined_masses_dump = np.append(mass_array_dump, mass_array_dump[::-1])
 
 
     # Read in data.
@@ -185,9 +201,8 @@ def main():
     sn1987a_upper = np.genfromtxt("data/existing_limits/sn1987a_upper.txt", delimiter=",")
     sn1987a_lower = np.genfromtxt("data/existing_limits/sn1987a_lower.txt", delimiter=",")
 
-    plt.plot(joined_masses*1e6, joined_limits*1e3, color="crimson", label='DUNE ND')
-    #plt.plot(mass_array*1e6, lower_limit*1e3, color="crimson", label='DUNE ND')
-    #plt.plot(mass_array*1e6, upper_limit*1e3, color="crimson")
+    plt.plot(joined_masses_target*1e6, joined_limits_target*1e3, color="crimson", label='DUNE ND (target)')
+    plt.plot(joined_masses_dump*1e6, joined_limits_dump*1e3, color="crimson", ls='dashed', label='DUNE ND (dump)')
 
 
     # Plot astrophysical limits
