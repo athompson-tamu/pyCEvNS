@@ -189,7 +189,7 @@ plt.hist([kevnr,kevnr,kevnr,kevnr], weights=[n_prompt, n_delayed, n_bg, dm_best_
          bins=kevnr_edges, stacked=True, histtype='stepfilled', density=density,
          color=['teal','tan', 'indianred', 'lightsteelblue'],
          label=[r"Prompt $\nu$", r"Delayed $\nu$", "AC Beam-On Background", r"$\chi N \to \chi N$ Best-fit"])
-plt.errorbar(kevnr_bins,obs_hist,yerr=n_obs_err,label=r"Beam-On data", color='k', ls='none', marker='.')
+plt.errorbar(kevnr_bins,obs_hist,yerr=n_obs_err,label=r"Beam-On data", color='k', ls='none', marker='o')
 plt.vlines(14, 0, 100, ls='dashed')
 plt.vlines(26, 0, 100, ls='dashed')
 plt.arrow(14, 30, 2, 0, head_width=1, color='k')
@@ -198,7 +198,7 @@ plt.xlabel(r"$E_r$ [MeV]", fontsize=15)
 plt.ylabel(r"Events", fontsize=15)
 plt.title(r"COHERENT CsI, $t < 1.5$ $\mu$s", loc="right", fontsize=15)
 plt.ylim((0,58))
-plt.xlim((0,42))
+plt.xlim((0,42.5))
 plt.legend(fontsize=13, framealpha=1, loc='upper right')
 plt.xticks(fontsize=13)
 plt.yticks(fontsize=13)
