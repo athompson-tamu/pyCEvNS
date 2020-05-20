@@ -158,20 +158,19 @@ def SimpleChi2(sig, bkg):
 
 
 def main():
-    mlist = np.logspace(0, np.log10(500), 7)
+    mlist = np.logspace(0, np.log10(500), 100)
     eplist = np.ones_like(mlist)
-    tmp = np.logspace(-20, 0, 20)
-
+    tmp = np.logspace(-20, 0, 20)                                                                                    
     use_save = False
     if use_save == True:
         print("using saved data")
-        saved_limits = np.genfromtxt("limits/ccm/dark_photon_limits_doublemed_ccm_loose.txt", delimiter=",")
+        saved_limits = np.genfromtxt("limits/ccm/dark_photon_limits_singlemed_ccm_loose_20200520.txt", delimiter=",")
         mlist = saved_limits[:,0]
         eplist = saved_limits[:,1]
     else:
         # Binary search.
         print("Running dark photon limits...")
-        outlist = open("limits/ccm/dark_photon_limits_doublemed_ccm_loose.txt", "w")
+        outlist = open("limits/ccm/dark_photon_limits_singlemed_ccm_loose_20200520.txt", "w")
         for i in range(mlist.shape[0]):
             print("Running m_X = ", mlist[i])
             hi = np.log10(tmp[-1])
@@ -179,7 +178,7 @@ def main():
             while hi - lo > 0.05:
                 mid = (hi + lo) / 2
                 print("------- trying g = ", 10**mid)
-                lg = SimpleChi2(GetDMEvents(10**mid, 75, 25, mlist[i]), n_nu)
+                lg = SimpleChi2(GetDMEvents(10**mid, mlist[i], mlist[i]/3, mlist[i]), n_nu)
                 print("lg = ", lg)
                 if lg < 6.18:
                     lo = mid
@@ -192,59 +191,6 @@ def main():
             outlist.write("\n")
 
         outlist.close()
-
-
-    # get existing limits
-    relic = np.genfromtxt('pyCEvNS/data/dark_photon_limits/relic.txt', delimiter=",")
-    ldmx = np.genfromtxt('pyCEvNS/data/dark_photon_limits/ldmx.txt')
-    lsnd = np.genfromtxt('pyCEvNS/data/dark_photon_limits/lsnd.csv', delimiter=",")
-    miniboone = np.genfromtxt('pyCEvNS/data/dark_photon_limits/miniboone.csv', delimiter=",")
-    na64 = np.genfromtxt('pyCEvNS/data/dark_photon_limits/na64.csv', delimiter=",")
-
-    # Convert from GeV mass to MeV
-    lsnd[:,0] *= 1000
-    miniboone[:,0] *= 1000
-    miniboone[:,2] *= 1000
-    na64[:,0] *= 1000
-
-    #ldmx[:,1] *= 2 * (3**4)
-    na64[:,1] *= 2 * (3**4)
-    lsnd[:,1] *= 4.5 * (3**4)  # TODO: check this
-    miniboone[:,1] *= 2 * (3**4)
-    miniboone[:,3] *= 2 * (3**4)
-
-
-    # Plot the existing limits.
-    plt.fill_between(miniboone[:,0], miniboone[:,1], y2=1, color="royalblue", alpha=0.3, label='MiniBooNE \n (Nucleus)')
-    plt.fill_between(na64[:,0], na64[:,1], y2=1, color="maroon", alpha=0.3, label='NA64')
-    plt.fill_between(miniboone[:,2], miniboone[:,3], y2=1, color="orchid", alpha=0.3, label='MiniBooNE \n (Electron)')
-    plt.fill_between(lsnd[:,0], lsnd[:,1], y2=1, color="crimson", alpha=0.3, label='LSND')
-
-    plt.plot(miniboone[:,0], miniboone[:,1], color="royalblue", ls="dashed")
-    plt.plot(na64[:,0], na64[:,1], color="maroon", ls="dashed")
-    plt.plot(miniboone[:,2], miniboone[:,3], color="orchid", ls="dashed")
-    plt.plot(lsnd[:,0], lsnd[:,1], color="crimson", ls="dashed")
-
-    # Plot relic density limit
-    plt.plot(relic[:,0], relic[:,1], color="k", linewidth=2)
-
-    # Plot the derived limits
-    plt.plot(mlist, eplist, label="CCM LAr (3 years, 10 ton)", linewidth=2, color="blue")
-    plt.title(r"$t<0.1$ $\mu$s, $E_r > 50$ keVnr, $m_X = m_V$, $m_\chi = 5$ MeV", loc='right')
-    plt.legend(loc="upper left", ncol=2, framealpha=1.0)
-
-    plt.xscale("Log")
-    plt.yscale("Log")
-    plt.xlim((10, 5e2))
-    plt.ylim((1e-11,3e-5))
-    plt.ylabel(r"$(\epsilon^\chi)^2$", fontsize=13)
-    plt.xlabel(r"$M_{A^\prime}$ [MeV]", fontsize=13)
-    plt.tight_layout()
-    #plt.savefig("plots/dark_photon/dark_photon_limits_ccm.png")
-    plt.show()
-
-
-
 
 
 if __name__ == "__main__":

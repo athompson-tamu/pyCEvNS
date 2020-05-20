@@ -70,11 +70,18 @@ prompt_flux = Flux('prompt')
 delayed_flux = Flux('delayed')
 brem_photons = np.genfromtxt("data/jsns/brem.txt")  # binned photon spectrum from
 Pi0Info = np.genfromtxt("data/jsns/Pi0_Info.txt")
+EtaInfo = np.genfromtxt("data/jsns/eta_info.txt")
 pion_energy = Pi0Info[:,4] - massofpi0
+eta_energy = EtaInfo[:,4] - massofeta
 pion_azimuth = np.arccos(Pi0Info[:,3] / np.sqrt(Pi0Info[:,1]**2 + Pi0Info[:,2]**2 + Pi0Info[:,3]**2))  # arccos of the unit z vector gives the azimuth angle
+eta_azimuth = np.arccos(EtaInfo[:,3] / np.sqrt(EtaInfo[:,1]**2 + EtaInfo[:,2]**2 + EtaInfo[:,3]**2))  # arccos of the unit z vector gives the azimuth angle
 pion_cos = np.cos(np.pi/180 * Pi0Info[:,0])
-pion_flux = np.array([pion_azimuth, pion_cos, pion_energy])
-pion_flux = pion_flux.transpose()
+eta_cos = np.cos(np.pi/180 * EtaInfo[:,0])
+pion_dist = np.array([pion_azimuth, pion_cos, pion_energy])
+pion_dist = pion_dist.transpose()
+eta_dist = np.array([eta_azimuth, eta_cos, eta_energy])
+eta_dist = eta_dist.transpose()
+
 
 # TODO: get pe efficiency for JSNS2. The following is for COHERENT.
 def efficiency(pe):
@@ -147,19 +154,36 @@ def GetNeutrinoEvents():
     return n_prompt + n_delayed
 
 
-
-
-def GetDMEvents(g, m_med, m_dp, m_chi):
-    start_time = time.time()
-    brem_flux = DMFluxIsoPhoton(brem_photons, dark_photon_mass=m_dp, coupling=1, dark_matter_mass=m_chi, life_time=0.0001,
+brem_flux = DMFluxIsoPhoton(brem_photons, dark_photon_mass=75, coupling=1, dark_matter_mass=25, life_time=0.0001,
                                 detector_distance=24, pot_mu=pot_mu, pot_sigma=pot_sigma, pot_sample=1e5,
                                 sampling_size=1000, brem_suppress=True, verbose=False)
-    pim_flux = DMFluxFromPiMinusAbsorption(dark_photon_mass=m_dp, coupling_quark=1, dark_matter_mass=m_chi, pion_rate=pim_rate,
+pim_flux = DMFluxFromPiMinusAbsorption(dark_photon_mass=75, coupling_quark=1, dark_matter_mass=25, pion_rate=pim_rate,
                                            pot_mu=pot_mu, pot_sigma=pot_sigma, detector_distance=24, life_time=0.0001,
                                            sampling_size=1000)
-    pi0_flux = DMFluxFromPi0Decay(pi0_distribution=pion_flux, dark_photon_mass=m_dp, coupling_quark=1, dark_matter_mass=m_chi,
-                                  pot_mu=pot_mu, pot_sigma=pot_sigma, detector_distance=24, life_time=0.0001)
-    dm_gen = DmEventsGen(dark_photon_mass=m_dp, dark_matter_mass=m_chi, life_time=0.001, expo=exposure, detector_type='jsns_scintillator')
+pi0_flux = DMFluxFromPi0Decay(pi0_distribution=pion_dist, dark_photon_mass=75, coupling_quark=1, dark_matter_mass=25,
+                              pot_mu=pot_mu, pot_sigma=pot_sigma, detector_distance=24, life_time=0.0001)
+eta_flux = DMFluxFromPi0Decay(pi0_distribution=eta_dist, dark_photon_mass=75, coupling_quark=1,
+                              dark_matter_mass=25, pot_mu=pot_mu, pot_sigma=pot_sigma, detector_distance=24,
+                              life_time=0.0001, meson_mass=massofeta)
+dm_gen = DmEventsGen(dark_photon_mass=75, dark_matter_mass=25, life_time=0.001, expo=exposure, detector_type='jsns_scintillator')
+
+def GetDMEvents(g, m_med, m_dp, m_chi):
+    dm_gen.dp_mass = m_med
+    dm_gen.dm_mass = m_chi
+
+    brem_flux.dp_m = m_dp
+    brem_flux.dm_m = m_chi
+    eta_flux.dp_m = m_dp
+    eta_flux.dm_m = m_chi
+    pim_flux.dp_m = m_dp
+    pim_flux.dm_m = m_chi
+    pi0_flux.dp_m = m_dp
+    pi0_flux.dm_m = m_chi
+
+    brem_flux.simulate()
+    pim_flux.simulate()
+    pi0_flux.simulate()
+    eta_flux.simulate()
 
     dm_gen.fx = brem_flux
     brem_events = dm_gen.events(m_med, g, energy_edges, timing_edges, channel="electron")
@@ -169,11 +193,11 @@ def GetDMEvents(g, m_med, m_dp, m_chi):
 
     dm_gen.fx = pi0_flux
     pi0_events = dm_gen.events(m_med, g, energy_edges, timing_edges, channel="electron")
-    
-    elapsed_time = time.time() - start_time
-    print("GetDMEvents took ", elapsed_time, " seconds")
 
-    return brem_events[0] + pim_events[0] + pi0_events[0]
+    dm_gen.fx = eta_flux
+    eta_events = dm_gen.events(m_med, g, energy_edges, timing_edges, channel="electron")
+
+    return brem_events[0] + pim_events[0] + pi0_events[0] + eta_events[0]
 
 
 
@@ -207,9 +231,9 @@ def main():
     # Get Neutrino backgrounds
     n_bg = np.zeros(energy_bins.shape[0]*len(timing_bins))
     n_nu = GetNeutrinoEvents()
-    
+
     # Set up limits.
-    mlist = np.logspace(1, np.log10(500), 5)
+    mlist = np.logspace(0, np.log10(500), 100)
     eplist = np.ones_like(mlist)
     tmp = np.logspace(-20, 0, 20)
 
@@ -217,13 +241,13 @@ def main():
     use_save = False
     if use_save == True:
         print("using saved data")
-        saved_limits = np.genfromtxt("limits/jsns2/dark_photon_limits_jsns_singlemed.txt", delimiter=",")
+        saved_limits = np.genfromtxt("limits/jsns2/dark_photon_limits_jsns_doublemed_withEta_20200520.txt", delimiter=",")
         mlist = saved_limits[:,0]
         eplist = saved_limits[:,1]
     else:
         # Binary search.
         print("Running dark photon limits...")
-        outlist = open("limits/jsns2/dark_photon_limits_jsns_singlemed.txt", "w")
+        outlist = open("limits/jsns2/dark_photon_limits_jsns_doublemed_withEta_20200520.txt", "w")
         for i in range(mlist.shape[0]):
             print("Running m_X = ", mlist[i])
             hi = np.log10(tmp[-1])
@@ -231,7 +255,7 @@ def main():
             while hi - lo > 0.05:
                 mid = (hi + lo) / 2
                 print("------- trying g = ", 10**mid)
-                lg = Chi2(GetDMEvents(10**mid, mlist[i], mlist[i], 4.9),n_nu)
+                lg = Chi2(GetDMEvents(g=10**mid, m_med=mlist[i], m_dp=75, m_chi=25),n_nu)
                 print("lg = ", lg)
                 if lg < 6.18:
                   lo = mid
@@ -244,42 +268,6 @@ def main():
             outlist.write("\n")
 
         outlist.close()
-
-    # Plot the existing limits.
-    #plt.fill_between(ldmx[:,0], ldmx[:,1], y2=1, label="LDMX", color="wheat", alpha=0.2)
-    plt.fill_between(miniboone[:,0], miniboone[:,1], y2=1, color="royalblue", alpha=0.3, label='MiniBooNE \n (Nucleus)')
-    plt.fill_between(na64[:,0], na64[:,1], y2=1, color="maroon", alpha=0.3, label='NA64')
-    plt.fill_between(miniboone[:,2], miniboone[:,3], y2=1, color="orchid", alpha=0.3, label='MiniBooNE \n (Electron)')
-    plt.fill_between(lsnd[:,0], lsnd[:,1], y2=1, color="crimson", alpha=0.3, label='LSND')
-
-    #plt.plot(ldmx[:,0], ldmx[:,1], label="LDMX", color="gold", ls="dashed")
-    plt.plot(miniboone[:,0], miniboone[:,1], color="royalblue", ls="dashed")
-    plt.plot(na64[:,0], na64[:,1], color="maroon", ls="dashed")
-    plt.plot(miniboone[:,2], miniboone[:,3], color="orchid", ls="dashed")
-    plt.plot(lsnd[:,0], lsnd[:,1], color="crimson", ls="dashed")
-
-    # Plot relic density limit
-    plt.plot(relic[:,0], relic[:,1], color="k", label='Relic Density', linewidth=2)
-
-    # Plot the derived limits.
-    plt.plot(mlist, eplist, label=r"JSNS$^2$ (50 ton, 3 years)", linewidth=2, color="blue")
-
-    plt.legend(loc="upper left", ncol=2, framealpha=1.0)
-    plt.title(r"$0.1<t<0.25$ $\mu$s, $m_X = m_V$, $m_\chi = 5$ MeV", loc='right')
-
-    plt.xscale("Log")
-    plt.yscale("Log")
-    plt.xlim((10, 5e2))
-    plt.ylim((1e-11,3e-5))
-    plt.ylabel(r"$\epsilon \kappa_D^V \kappa_f^V$", fontsize=13)
-    plt.xlabel(r"$m_X$ [MeV]", fontsize=13)
-    plt.tight_layout()
-    plt.savefig("paper_plots/dark_photon_limits_singlemed_maxEr300MeV_t005-02.png")
-    plt.show()
-
-
-
-
-
+    
 if __name__ == "__main__":
     main()
