@@ -6,6 +6,7 @@ This package provides convenient methods for calculting neutrino experiment even
 * scipy
 * numpy
 * pandas
+* mpmath
 
 ## Basic usage
 
