@@ -155,7 +155,8 @@ m_dp = 75
 m_chi = 25
 tau = 0.001
 dm_gen = DmEventsGen(dark_photon_mass=m_dp, dark_matter_mass=m_chi,
-                         life_time=0.001, expo=exp_csi, detector_type='csi')
+                         life_time=0.001, expo=exp_csi, detector_type='csi',
+                         rn=4.7)
 brem_flux = DMFluxIsoPhoton(brem_photons, dark_photon_mass=m_dp, coupling=1,
                             dark_matter_mass=m_chi, pot_sample=1e5,
                             sampling_size=1000, detector_distance=19.3,

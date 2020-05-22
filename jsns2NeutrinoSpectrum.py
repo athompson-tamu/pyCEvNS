@@ -159,11 +159,9 @@ def GetDMEvents(m_chi, m_dp, m_med, g, lifetime=0.001):
 
     return brem_events + pim_events + pi0_events
 
-#dm_events1 = GetDMEvents(m_chi=5, m_dp=75, m_med=25, g=1e-4)
-#dm_events2 = GetDMEvents(m_chi=5, m_dp=300, m_med=25, g=1e-4)
-dm_events1 = GetDMEvents(m_chi=25, m_dp=75, m_med=25, g=1e-4, lifetime=0.001)
-dm_events2 = GetDMEvents(m_chi=25, m_dp=75, m_med=25, g=2e-4, lifetime=1)
-dm_events3 = GetDMEvents(m_chi=5, m_dp=138, m_med=25, g=2e-4, lifetime=1)
+dm_events1 = GetDMEvents(m_chi=2, m_dp=75, m_med=75, g=1e-4)
+dm_events2 = GetDMEvents(m_chi=25, m_dp=75, m_med=75, g=1e-4)
+
 
 
 
@@ -187,7 +185,9 @@ plt.show()
 plt.clf()
 
 
-
+dm_events1 = GetDMEvents(m_chi=25, m_dp=75, m_med=25, g=1e-4, lifetime=0.001)
+dm_events2 = GetDMEvents(m_chi=25, m_dp=75, m_med=25, g=2e-4, lifetime=1)
+dm_events3 = GetDMEvents(m_chi=5, m_dp=138, m_med=25, g=2e-4, lifetime=1)
 print(np.sum(dm_events1), np.sum(dm_events2), np.sum(dm_events3))
 
 density = True

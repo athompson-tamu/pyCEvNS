@@ -103,10 +103,55 @@ def _screening(e, ma):
     return numerator / denomenator
 
 
+
+class AxionFlux:
+    def __init__(self, photon_flux, target_mass=240e3, target_z=90, target_photon_cross=15e-24,
+                 det_dist=4, det_length=0.2, det_area=0.04):
+        """
+        photon_flux: source photon array [[rate, energy, angle],...,[]] array in s^-1, MeV, radians
+        target_mass: mass of target atom in MeV
+        target_z: atomic number of target atom
+        target_photon_cross: SM photon absorption cross-section in target
+        det_dist: distance from target to detector in m
+        det_length: length of the detector along the direction from target to detector
+        det_area: cross-sectional area of the detector facing the photon/axion source
+        """
+        self.photon_flux = photon_flux  # per second
+        self.target_mass = target_mass  # target MeV
+        self.target_z = target_z
+        self.target_photon_cross = target_photon_cross  # cm^2
+        self.det_dist = det_dist  # meter
+        self.det_back = det_length + det_dist
+        self.det_length = det_length
+        self.det_area = det_area
+        self.axion_energy = []
+        self.axion_angle = []
+        self.decay_weight = []
+        self.scatter_weight = []
+        self.diphoton_angle = []
+    
+    def decay_events(self, detection_time, threshold):
+        res = 0
+        for i in range(len(self.decay_weight)):
+            if self.axion_energy[i] >= threshold:
+                res += self.decay_weight[i]
+        return res * detection_time
+
+    def scatter_events(self, detector_number, detector_z, detection_time, threshold):
+        res = 0
+        for i in range(len(self.scatter_axion_weight)):
+            if self.axion_energy[i] >= threshold:
+                res += self.scatter_axion_weight[i] \
+                    * primakoff_scattering_xs(self.axion_energy[i], detector_z,
+                                              self.axion_mass, self.axion_coupling) \
+                    * detection_time * detector_number * meter_by_mev ** 2
+        return res
+
+
 # Directional axion production from beam-produced photon distribution
 class PrimakoffAxionFromBeam:
-    def __init__(self, photon_rates, axion_mass, axion_coupling, target_mass, target_z,
-                 target_photon_cross, detector_distance, detector_length, detector_area):
+    def __init__(self, photon_rates, target_mass, target_z, target_photon_cross, detector_distance,
+                 detector_length, detector_area, axion_mass=1, axion_coupling=1e-3):
         self.photon_rates = photon_rates  # per second
         self.axion_mass = axion_mass  # MeV
         self.axion_coupling = axion_coupling  # MeV^-1
@@ -134,7 +179,7 @@ class PrimakoffAxionFromBeam:
     def get_beaming_angle(self, v):
         return np.arcsin(sqrt(1-v**2))
 
-    def simulate_single(self, photon, nsamples=50):
+    def simulate_single(self, photon, nsamples=100):
         rate = photon[0]
         e_gamma = photon[1]
         theta_gamma = photon[2]
@@ -146,9 +191,7 @@ class PrimakoffAxionFromBeam:
         
         # Draw axion primakoff scattering angle
         cosphi_axion = np.random.uniform(-1, 1, nsamples)  # disk around photon
-        
         dtheta = primakoff_prod_quant(e_gamma, self.target_z, self.axion_mass, nsamples) # gamma-axion separation
-        
         theta_axion = abs(arccos(sin(theta_gamma)*cosphi_axion*sin(dtheta) + cos(theta_gamma)*cos(dtheta)))
 
         # Get axion Lorentz transformations and kinematics
@@ -161,14 +204,14 @@ class PrimakoffAxionFromBeam:
         # Get decay and survival probabilities
         surv_prob =  mp.exp(-self.det_dist / meter_by_mev / axion_v / tau)
         decay_in_detector = fsub(1,mp.exp(-self.det_length / meter_by_mev / axion_v / tau))
-        in_solid_angle = (self.det_sa() >= theta_axion)
+        in_solid_angle = (self.det_sa() >= theta_axion)  # array of truth values
 
         # Push back lists and weights
         for i in range(nsamples):
             energies.append(e_gamma) # elastic limit
             thetas.append(theta_axion[i])
-            scatter_weights.append(rate * br * surv_prob * in_solid_angle / nsamples)
-            decay_weights.append(rate * br * surv_prob * decay_in_detector * in_solid_angle / nsamples)
+            scatter_weights.append(rate * br * surv_prob * in_solid_angle[i] / nsamples)
+            decay_weights.append(rate * br * surv_prob * decay_in_detector * in_solid_angle[i] / nsamples)
             gamma_sep_thetas.append(np.arcsin(sqrt(1-axion_v**2))) # beaming formula for iso decay
         
         return (energies, thetas, scatter_weights, decay_weights, gamma_sep_thetas)
@@ -180,10 +223,8 @@ class PrimakoffAxionFromBeam:
         self.decay_axion_weight = []
         self.gamma_sep_angle = []
         
-        with multi.Pool(multi.cpu_count()) as pool:
+        with multi.Pool(max(1, multi.cpu_count()-1)) as pool:
             ntuple = pool.map(self.simulate_single, [f for f in self.photon_rates])
-            #ntuple = [pool.apply(self.simulate_single, args=(f, nsamples)) for f in self.photon_rates]
-            #ntuple = pool.starmap_async(self.simulate_single, [(f, nsamples) for f in self.photon_rates]).get()
             pool.close()
         
         for tup in ntuple:

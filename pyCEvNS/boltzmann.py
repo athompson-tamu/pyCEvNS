@@ -1,5 +1,6 @@
 from .constants import *
 from .helper import *
+from .parameters import *
 from scipy.integrate import solve_ivp
 
 
@@ -27,7 +28,7 @@ tss = 4/1.1605e10
 h0 = 2.2e-18/c_light*meter_by_mev
 rho0 = 3*h0**2*mp**2
 
-gdata = np.genfromtxt('./Gstar1.dat')
+gdata = np.genfromtxt(pkg_resources.resource_filename(__name__, "data/Gstar1.dat"))
 x = gdata[13010:, 0]*1e3
 y = gdata[13010:, 1]
 d = 2 + 7/8*(6)*4/11. - gdata[0, 1]
@@ -64,6 +65,7 @@ geffs = LinearInterp(x, y, extend=True)
 # this function solves bolzmann equation for DM relic abundance
 def boltzmann(epsilon, ma, alphad=0.5, mf=me, mchi_ratio=3, xinit=1, xfin=10000):
     m = ma/mchi_ratio
+    y0 = 4*0.192*mp*m*np.exp(-1)
     def func(x, y):
         return -1/x**2*sigmav(epsilon, ma,1/x, alphad, mf, mchi_ratio) * (y**2-(4*0.192*mp*m*x**1.5*np.exp(-x))**2)
-    return solve_ivp(func, (xinit, xfin), [4*0.192*mp*m*np.exp(-1)], method='BDF')
+    return solve_ivp(func, (xinit, xfin), [y0], method='BDF'), y0

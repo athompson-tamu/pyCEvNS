@@ -38,12 +38,12 @@ lar610[:,0] *= 3
 
 
 # Rescale the limits
-eps_rescale = (4*pi/137) / ((3**4) * 4*pi*np.sqrt(10/137))
+echarge = np.sqrt(4*np.pi/137)
+eps_rescale = echarge / (3**4) / 4 / np.pi  #old: (4*pi/137) / ((3**4) * 4*pi*np.sqrt(10/137))
 y_rescale = 1 #(3**4) * 4*pi*np.sqrt(10/137)
 
 #ldmx[:,1] *= 2 * (3**4)
 #lar610[:,1] *= (3**4) * 4*pi*np.sqrt(2/137)
-relic[:,1] *= eps_rescale
 na64[:,1] *= y_rescale
 lsnd[:,1] *= y_rescale
 miniboone_e[:,1] *= y_rescale
@@ -66,6 +66,9 @@ def smoother(arr):
 
 def plot_singlemed():
         # Plot single-mediator limits
+        eps_rescale = echarge / (3**4) / 4 / np.pi  #old: (4*pi/137) / ((3**4) * 4*pi*np.sqrt(10/137))
+        y_rescale = 1 #(3**4) * 4*pi*np.sqrt(10/137)
+        
         
         # Load derived limits.
         ccm_loose = np.genfromtxt("limits/ccm/dark_photon_limits_singlemed_ccm_loose_100pts.txt", delimiter=",")
@@ -88,7 +91,7 @@ def plot_singlemed():
         plt.plot(lsnd[:,0], lsnd[:,1], color="chocolate", ls="dashed")
 
         # Plot relic density limit
-        plt.plot(relic[:,0], relic[:,1], color="k", linewidth=2)
+        plt.plot(relic[:,0], eps_rescale*relic[:,1], color="k", linewidth=2)
         
         # Smooth out the limits
         jsns2[:,1] = signal.savgol_filter(jsns2[:,1], 13, 2)
@@ -103,6 +106,7 @@ def plot_singlemed():
         # Plot the lar610 projection
         plt.plot(lar610[:,0], lar610[:,1], color="darkred", ls="dashdot", linewidth=2, label="COHERENT Future-LAr (1912.06422)")
         plt.plot(jsns2[:,0], eps_rescale*jsns2[:,1], label=r"JSNS$^2$", linewidth=2, color="orange")
+        
         
         
         # Draw text for existing limits.
@@ -123,8 +127,8 @@ def plot_singlemed():
         plt.ylim((1e-15,2e-5))
         plt.xticks(fontsize=13)
         plt.yticks(fontsize=13)
-        plt.ylabel(r"$Y\equiv \epsilon^2 \alpha_D (\frac{m_\chi}{m_X})^4$", fontsize=15)
-        plt.xlabel(r"$m_X$ [MeV]", fontsize=15)
+        plt.ylabel(r"$Y\equiv \epsilon^2 \alpha_D (\frac{m_\chi}{m_V})^4$", fontsize=15)
+        plt.xlabel(r"$m_V$ [MeV]", fontsize=15)
         plt.tight_layout()
         plt.savefig("paper_plots/combined_limits_singlemed.png")
         plt.show()
@@ -132,7 +136,10 @@ def plot_singlemed():
 
 
 def plot_doublemed():
-        epsilon = 0.01**2
+        eps_rescale = echarge**4 / (0.002)**2 / (4*pi*0.5)  #old: (4*pi/137) / ((3**4) * 4*pi*np.sqrt(10/137))
+        y_rescale = (3**4) * 4*pi*sqrt(10/137)
+        beam_dump_rescale = 1/(0.002)  # additional factor for beam dump experiments which are proportional to eps^4, but now we fix the production coupling
+        jsns_rescale = 1/3 # ad hoc rescaling for going from m_chi = 25 to 2
         
         # Double-mediator
         ccm_loose = np.genfromtxt("limits/ccm/dark_photon_limits_doublemed_ccm_loose.txt", delimiter=",")
@@ -144,45 +151,45 @@ def plot_doublemed():
         coherent_futureLAr[:,1] *= (685/610)
 
         # Plot the existing limits.
-        plt.fill_between(babar[:,0], epsilon*babar[:,1], y2=1, color="teal", alpha=0.15)
-        plt.fill_between(miniboone_n[:,0], epsilon*miniboone_n[:,1], y2=1, color="mediumpurple", alpha=0.15)
-        plt.fill_between(na64[:,0], epsilon*na64[:,1], y2=1, color="tan", alpha=0.15)
-        plt.fill_between(miniboone_e[:,0], epsilon*miniboone_e[:,1], y2=1, color="orchid", alpha=0.15)
-        plt.fill_between(lsnd[:,0], epsilon*lsnd[:,1], y2=1, color="chocolate", alpha=0.15)
+        plt.fill_between(babar[:,0], y_rescale*babar[:,1], y2=1, color="teal", alpha=0.15)
+        plt.fill_between(miniboone_n[:,0], (beam_dump_rescale*y_rescale*miniboone_n[:,1])**2, y2=1, color="mediumpurple", alpha=0.15)
+        plt.fill_between(na64[:,0], y_rescale*na64[:,1], y2=1, color="tan", alpha=0.15)
+        plt.fill_between(miniboone_e[:,0], (beam_dump_rescale*y_rescale*miniboone_e[:,1])**2, y2=1, color="orchid", alpha=0.15)
+        plt.fill_between(lsnd[:,0], (beam_dump_rescale*y_rescale*lsnd[:,1])**2, y2=1, color="chocolate", alpha=0.15)
 
-        plt.plot(babar[:,0], epsilon*babar[:,1], color="teal", ls="dashed")
-        plt.plot(miniboone_n[:,0], epsilon*miniboone_n[:,1], color="mediumpurple", ls="dashed")
-        plt.plot(na64[:,0], epsilon*na64[:,1], color="tan", ls="dashed")
-        plt.plot(miniboone_e[:,0], epsilon*miniboone_e[:,1], color="orchid", ls="dashed")
-        plt.plot(lsnd[:,0], epsilon*lsnd[:,1], color="chocolate", ls="dashed")
+        plt.plot(babar[:,0], y_rescale*babar[:,1], color="teal", ls="dashed")
+        plt.plot(miniboone_n[:,0], (beam_dump_rescale*y_rescale*miniboone_n[:,1])**2, color="mediumpurple", ls="dashed")
+        plt.plot(na64[:,0], y_rescale*na64[:,1], color="tan", ls="dashed")
+        plt.plot(miniboone_e[:,0], (beam_dump_rescale*y_rescale*miniboone_e[:,1])**2, color="orchid", ls="dashed")
+        plt.plot(lsnd[:,0], (beam_dump_rescale*y_rescale*lsnd[:,1])**2, color="chocolate", ls="dashed")
 
         # Plot relic density limit
-        #plt.plot(relic[:,0], relic[:,1], color="k", linewidth=2)
+        plt.plot(relic[:,0], relic[:,1], color="k", linewidth=2)
 
         # Plot the derived limits
-        plt.plot(ccm_tight[:,0], epsilon*eps_rescale*ccm_tight[:,1], label="CCM LAr (Tight WP)", linewidth=2, color="dodgerblue")
-        plt.plot(ccm_loose[:,0], epsilon*eps_rescale*ccm_loose[:,1], label="CCM LAr (Loose WP)", linewidth=2, ls='dashed', color="dodgerblue")
-        plt.plot(coherent[:,0], epsilon*eps_rescale*coherent[:,1], label="COHERENT CsI + LAr", linewidth=2, color="crimson")
-        plt.plot(coherent_futureLAr[:,0], epsilon*eps_rescale*coherent_futureLAr[:,1], label="COHERENT Future-LAr", linewidth=2, ls='dashed', color="crimson")
-        plt.plot(jsns2[:,0], epsilon*eps_rescale*jsns2[:,1], label=r"JSNS$^2$", linewidth=2, color="orange")
+        plt.plot(ccm_tight[:,0], eps_rescale*ccm_tight[:,1]**2, label="CCM LAr (Tight WP)", linewidth=2, color="dodgerblue")
+        plt.plot(ccm_loose[:,0], eps_rescale*ccm_loose[:,1]**2, label="CCM LAr (Loose WP)", linewidth=2, ls='dashed', color="dodgerblue")
+        plt.plot(coherent[:,0], eps_rescale*coherent[:,1]**2, label="COHERENT CsI + LAr", linewidth=2, color="crimson")
+        plt.plot(coherent_futureLAr[:,0], eps_rescale*coherent_futureLAr[:,1]**2, label="COHERENT Future-LAr", linewidth=2, ls='dashed', color="crimson")
+        plt.plot(jsns2[:,0], jsns_rescale*eps_rescale*jsns2[:,1]**2, label=r"JSNS$^2$", linewidth=2, color="orange")
         
         # Draw text for existing limits.
         text_fs = 13
-        plt.text(6,epsilon*4e-11,'MiniBooNE \n (Nucleus)', rotation=0, fontsize=text_fs, color="mediumpurple", weight="bold")
-        plt.text(50,epsilon*2e-8,'MiniBooNE \n (Electron)', rotation=0, fontsize=text_fs, color="orchid", weight="bold")
-        plt.text(40,epsilon*1e-10,'NA64', rotation=25, fontsize=text_fs, color="tan", weight="bold")
-        plt.text(20,epsilon*1.5e-10,'LSND', rotation=20, fontsize=text_fs, color="chocolate", weight="bold")
-        plt.text(138,epsilon*2e-9,'BaBar', rotation=0, fontsize=text_fs, color="teal", weight="bold")
-        #plt.text(100,2e-13,'Relic Density', rotation=20, fontsize=text_fs, color="k", weight="bold")
+        plt.text(138,y_rescale*2e-9,'BaBar', rotation=0, fontsize=text_fs, color="teal", weight="bold")
+        plt.text(3.5,y_rescale*2e-11,'MiniBooNE \n (Nucleus)', rotation=0, fontsize=text_fs, color="mediumpurple", weight="bold")
+        plt.text(50,y_rescale*2e-8,'MiniBooNE \n (Electron)', rotation=0, fontsize=text_fs, color="orchid", weight="bold")
+        plt.text(40,y_rescale*4e-11,'NA64', rotation=20, fontsize=text_fs, color="tan", weight="bold")
+        plt.text(26,y_rescale*5e-9,'LSND', rotation=0, fontsize=text_fs, color="chocolate", weight="bold")
+        plt.text(100,y_rescale*3e-12,'Relic Density', rotation=12, fontsize=text_fs, color="k", weight="bold")
         
-        plt.title(r"$\epsilon = 0.01$, $m_X=75$ MeV, $m_\chi =25$ MeV", loc='right', fontsize=15)
-        plt.legend(loc="upper left", fontsize=9, framealpha=1.0)
+        plt.title(r"$m_X=75$ MeV, $\alpha_D = 0.5$, $m_\chi =2$ MeV", loc='right', fontsize=15)
+        plt.legend(loc="lower right", fontsize=9, framealpha=1.0)
 
         plt.xscale("Log")
         plt.yscale("Log")
-        plt.xlim((3, 450))
-        plt.ylim((epsilon*1e-15,epsilon*2e-7))
-        plt.ylabel(r"$Y\equiv \epsilon^2 \alpha_D (\frac{m_\chi}{m_X})^4$", fontsize=15)
+        plt.xlim((3, 500))
+        plt.ylim((1e-18,1e-3))
+        plt.ylabel(r"$\epsilon^2$", fontsize=15)
         plt.xlabel(r"$m_V$ [MeV]", fontsize=15)
         plt.xticks(fontsize=13)
         plt.yticks(fontsize=13)

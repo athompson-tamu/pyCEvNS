@@ -1,4 +1,5 @@
 import sys
+import time
 
 from pyCEvNS.events import *
 from pyCEvNS.flux import *
@@ -7,16 +8,18 @@ from scipy import signal
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import UnivariateSpline
+
+import multiprocessing as multi
+
 from matplotlib.pylab import rc
 
 rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
 rc('text', usetex=True)
 
-
 # Set up neutrino PDFs and efficiencies.
-prompt_pdf = np.genfromtxt('data/arrivalTimePDF_promptNeutrinos.txt', delimiter=',')
-delayed_pdf = np.genfromtxt('data/arrivalTimePDF_delayedNeutrinos.txt', delimiter=',')
-nin_pdf = np.genfromtxt('data/arrivalTimePDF_promptNeutrons.txt', delimiter=',')
+prompt_pdf = np.genfromtxt('data/coherent/arrivalTimePDF_promptNeutrinos.txt', delimiter=',')
+delayed_pdf = np.genfromtxt('data/coherent/arrivalTimePDF_delayedNeutrinos.txt', delimiter=',')
+nin_pdf = np.genfromtxt('data/coherent/arrivalTimePDF_promptNeutrons.txt', delimiter=',')
 
 # Get Neutrino Events
 def prompt_time(t):
@@ -24,7 +27,6 @@ def prompt_time(t):
         return 0
     else:
         return prompt_pdf[int((t-0.25)/0.5), 1]
-
 
 def delayed_time(t):
     if t < 0.25 or t > 11.75:
@@ -43,6 +45,7 @@ def ffs(q):
     s = 0.9 * (10 ** -15) / meter_by_mev
     r0 = np.sqrt(5/3 * (r ** 2) - 5 * (s ** 2))
     return (3 * spherical_jn(1, q * r0) / (q * r0) * np.exp((-(q * s) ** 2) / 2)) ** 2
+
 def efficiency(pe):
     a = 0.6655
     k = 0.4942
@@ -64,14 +67,11 @@ def efficiency_lar(pe):
 
 # Define constants
 pe_per_mev = 0.0878 * 13.348 * 1000
-exp_csi = 4466
-exp_ar = 1.5*274* 24  # tweaked to data
-exp_future_lar = 685 * 3 * 365 * (19.3/28)**2
-#exp_ar = exp_future_lar
+exp_csi = 4466 * 3 # 3 years exposure
+exp_ar = 3.0*274* 24  # 3 years exposure
 pim_rate = 0.0457
 
-
-
+print("initializing neutrino events...")
 # Get Neutrino events (CsI)
 # Set up energy and timing bins
 hi_energy_cut = 0.026  # mev
@@ -187,6 +187,7 @@ pion_flux = np.array([pion_azimuth, pion_cos, pion_energy])
 pion_flux = pion_flux.transpose()
 
 # Initialize classes.
+print("...initializing fluxes")
 dm_gen = DmEventsGen(dark_photon_mass=75, dark_matter_mass=25,
                          life_time=0.001, expo=exp_csi, detector_type='csi')
 dm_gen_lar = DmEventsGen(dark_photon_mass=75, dark_matter_mass=25,
@@ -257,10 +258,27 @@ def SimpleChi2(sig, bkg):
     likelihood = (sig)**2 / np.sqrt(bkg**2 + 1)
     return np.sum(likelihood)
 
+
+def BinarySearch(mass):
+    print("Running m_X = ", mass)
+    hi = 0
+    lo = -20
+    while hi - lo > 0.05:
+        mid = (hi + lo) / 2
+        print("------- trying g = ", 10**mid)
+        lg = SimpleChi2(GetDMEvents(10**mid, 75, 25, mass),
+                        n_bg + n_nu)
+        print("lg = ", lg)
+        if lg < 6.18:
+            lo = mid
+        else:
+            hi = mid
+    return (mass, 10**mid)
+
+
 def main():
-    mlist = np.logspace(0, np.log10(500), 7)
+    mlist = np.logspace(0, np.log10(500), 6)
     eplist = np.ones_like(mlist)
-    tmp = np.logspace(-20, 0, 20)
 
     use_save = False
     if use_save == True:
@@ -270,28 +288,18 @@ def main():
         eplist = saved_limits[:,1]
     else:
         # Binary search.
-        outlist = open("limits/coherent/dark_photon_limits_coh_doublemed_csi-lar_20200520.txt", "w")
-        for i in range(mlist.shape[0]):
-            print("Running m_X = ", mlist[i])
-            hi = np.log10(tmp[-1])
-            lo = np.log10(tmp[0])
-            while hi - lo > 0.05:
-                mid = (hi + lo) / 2
-                print("------- trying g = ", 10**mid)
-                lg = SimpleChi2(GetDMEvents(10**mid, 75, 25, mlist[i]),
-                                n_bg + n_nu)
-                print("lg = ", lg)
-                if lg < 6.18:
-                lo = mid
-                else:
-                hi = mid
-            eplist[i] = 10**mid
-            outlist.write(str(mlist[i]))
-            outlist.write(",")
-            outlist.write(str(10**mid))
-            outlist.write("\n")
+        cpus = 6
+        t1 = time.time()
+        with multi.Pool(cpus) as pool:
+            limit_array = pool.map(BinarySearch, [m for m in mlist])
+        
+        t2 = time.time()
+        print("Took %0.3f s for %d cores" % (t2 - t1, cpus))
 
-        outlist.close()
+        limit_array = np.sort(limit_array, axis=0)
+        np.savetxt("limits/coherent/dark_photon_limits_coh_doublemed_csi-lar_20200520.txt",
+                   limit_array, delimiter=",")
+
 
 
 
