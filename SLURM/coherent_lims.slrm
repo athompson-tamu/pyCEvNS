@@ -1,0 +1,23 @@
+#!/bin/bash
+#SBATCH -J COH_dark_photon
+#SBATCH --time=100:00:00
+#SBATCH -n1
+#SBATCH --mem-per-cpu=2000
+#SBATCH -o %j.out
+#SBATCH -e %j.err
+
+echo "starting at `date` on `hostname`"
+
+# Print the SLURM job ID.
+echo "SLURM_JOBID=$SLURM_JOBID"
+
+RUNDIR='/scratch/user/thompson/physics/DarkPhoton'
+
+# Run the vmtest application
+echo "running dark photon limits"
+cd $RUNDIR
+python dmphoton_limits_coherent.py
+
+
+echo "ended at `date` on `hostname`"
+exit 0
