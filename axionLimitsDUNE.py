@@ -207,5 +207,5 @@ def main(flux_file, save_dir, show_plots):
 
 
 if __name__ == "__main__":
-    main(flux_file=str(sys.argv[1]), save_dir=str(sys.argv[2]), sys.argv[3])
+    main(flux_file=str(sys.argv[1]), save_dir=str(sys.argv[2]), show_plots=sys.argv[3])
 
