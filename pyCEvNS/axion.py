@@ -180,9 +180,12 @@ class PrimakoffAxionFromBeam:
         return np.arcsin(sqrt(1-v**2))
 
     def simulate_single(self, photon, nsamples=100):
+        if photon[1] < self.axion_mass:
+            return
         rate = photon[0]
         e_gamma = photon[1]
         theta_gamma = photon[2]
+        
         energies = []
         thetas = []
         scatter_weights = []

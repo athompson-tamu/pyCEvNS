@@ -140,6 +140,22 @@ def lorentz_boost(momentum, v):
     return mat @ momentum
 
 
+def lorentz_matrix(v):
+    """
+    Lorentz boost matrix to a new frame with velocity v
+    :param v: velocity of new frame, 3-dimention
+    :return: Lorentz transformation in 4x4 matrix representation
+    """
+    n = v/np.sqrt(np.sum(v**2))
+    beta = np.sqrt(np.sum(v**2))
+    gamma = 1/np.sqrt(1-beta**2)
+    mat = np.array([[gamma, -gamma*beta*n[0], -gamma*beta*n[1], -gamma*beta*n[2]],
+                    [-gamma*beta*n[0], 1+(gamma-1)*n[0]*n[0], (gamma-1)*n[0]*n[1], (gamma-1)*n[0]*n[2]],
+                    [-gamma*beta*n[1], (gamma-1)*n[1]*n[0], 1+(gamma-1)*n[1]*n[1], (gamma-1)*n[1]*n[2]],
+                    [-gamma*beta*n[2], (gamma-1)*n[2]*n[0], (gamma-1)*n[2]*n[1], 1+(gamma-1)*n[2]*n[2]]])
+    return mat
+
+
 
 # legacy
 """

@@ -5,7 +5,7 @@ flux related class and functions
 from scipy.integrate import quad
 import pandas as pd
 
-from .helper import LinearInterp, polar_to_cartesian, lorentz_boost
+from .helper import LinearInterp, polar_to_cartesian, lorentz_boost, lorentz_matrix
 from .oscillation import survival_solar
 from .parameters import *
 
@@ -818,15 +818,15 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
         self.time = []
         self.energy = []
         self.weight = []
+        normalization = self.epsilon ** 2 * (self.pot_rate / self.pot_sample) \
+                        / (4 * np.pi * (self.det_dist ** 2) * 24 * 3600) * (meter_by_mev**2)
+        self.norm = normalization
+        
         for photon_events in self.photon_flux:
             if self.verbose:
                 print("getting photons from E =", photon_events[0], "Size =", photon_events[1])
             self._generate_single(photon_events, self.sampling_size)
-
-        normalization = self.epsilon ** 2 * (self.pot_rate / self.pot_sample) \
-                        / (4 * np.pi * (self.det_dist ** 2) * 24 * 3600) * (meter_by_mev**2)
-        self.norm = normalization
-        self.weight = [x * self.norm for x in self.weight]
+        
         self.timing = np.array(self.time) * 1e6
         hist, bin_edges = np.histogram(self.energy, bins=self.nbins, weights=self.weight, density=True)
         super().__init__((bin_edges[:-1] + bin_edges[1:]) / 2, hist, norm=np.sum(self.weight))
@@ -847,69 +847,70 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
         dm_p = np.sqrt(dm_e ** 2 - dm_m ** 2)
 
         # Directional sampling.
-        dp_wgt = photon_events[1] / nsamples  # Event weight
+        dp_wgt = self.norm * photon_events[1] / nsamples  # Event weight
         # Brem suppression
         if self.supp == True:
             el_e = 1.0773*dp_e + 13.716  # most likely electron energy that produced this dark photon
             supp_fact = min(1, 1154 * np.exp(-24.42 * np.power(dp_m/el_e, 0.3174)))
             dp_wgt *= supp_fact
-        for i in range(0, nsamples):
-            t = 0
-            pos = np.zeros(3)
-            t += np.random.normal(self.pot_mu * 1e-6, self.pot_sigma * 1e-6)
-            t_dp = np.random.exponential(1e-6 * self.life_time * dp_momentum[0] / dp_m)
-            pos += c_light * t_dp * np.array(
-                [dp_momentum[1] / dp_momentum[0], dp_momentum[2] / dp_momentum[0], dp_momentum[3] / dp_momentum[0]])
-            t += t_dp
-            csd = np.random.uniform(-1, 1)
-            phid = np.random.uniform(0, 2 * np.pi)
-            dm_momentum = np.array([dm_e, dm_p * np.sqrt(1 - csd ** 2) * np.cos(phid),
-                                    dm_p * np.sqrt(1 - csd ** 2) * np.sin(phid), dm_p * csd])
-            dm_momentum = lorentz_boost(dm_momentum,
-                                        np.array([-dp_momentum[1] / dp_momentum[0],
-                                                  -dp_momentum[2] / dp_momentum[0],
-                                                  -dp_momentum[3] / dp_momentum[0]]))
+        
+        ## optimize
+        #pos = np.zeros(3) ## optimize
+        t = np.random.normal(self.pot_mu * 1e-6, self.pot_sigma * 1e-6, nsamples)
+        t_dp = np.random.exponential(1e-6 * self.life_time * dp_momentum[0] / dp_m, nsamples)
+        t += t_dp
+        csd = np.random.uniform(-1, 1, nsamples)
+        phid = np.random.uniform(0, 2 * np.pi, nsamples)
+        boost_matr = lorentz_matrix(np.array([-dp_momentum[1] / dp_momentum[0],
+                                              -dp_momentum[2] / dp_momentum[0],
+                                              -dp_momentum[3] / dp_momentum[0]]))
+        pos_z = c_light * t_dp * dp_momentum[3] / dp_momentum[0]  # position is along z by construction
+        for i in range(nsamples):
+            #print(pos[i])
+            dm_momentum = np.array([dm_e, dm_p * np.sqrt(1 - csd[i] ** 2) * np.cos(phid[i]),
+                                    dm_p * np.sqrt(1 - csd[i] ** 2) * np.sin(phid[i]), dm_p * csd[i]])
+            dm_momentum = boost_matr @ dm_momentum
 
             # dark matter arrives at detector, assuming azimuthal symmetric
             # append the time and energy spectrum of the DM.
             # DM particle 1
             v = dm_momentum[1:] / dm_momentum[0] * c_light
-            a = np.sum(v ** 2)
-            b = 2 * np.sum(v*pos) #2 * v[2] * (c_light * dp_p / dp_e) * t_dp
-            c = np.sum(pos ** 2) - self.det_dist ** 2
+            a = v[0]*v[0] + v[1]*v[1] + v[2]*v[2] #np.sum(v ** 2)
+            b = 2*v[2]*pos_z[i]  # dot product is along z by construction
+            c = pos_z[i]**2 - self.det_dist ** 2
             if b ** 2 - 4 * a * c >= 0:
                 t_dm = (-b - np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
                 if t_dm >= 0:
                     if self.verbose:
                         print("adding weight", dp_wgt)
-                    self.time.append(t+t_dm)
+                    self.time.append(t[i]+t_dm)
                     self.energy.append(dm_momentum[0])
                     self.weight.append(dp_wgt)
                 t_dm = (-b + np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
                 if t_dm >= 0:
                     if self.verbose:
                         print("adding weight", dp_wgt)
-                    self.time.append(t+t_dm)
+                    self.time.append(t[i]+t_dm)
                     self.energy.append(dm_momentum[0])
                     self.weight.append(dp_wgt)
             # DM particle 2
             v = (dp_momentum - dm_momentum)[1:] / (dp_momentum - dm_momentum)[0] * c_light
-            a = np.sum(v ** 2)
-            b = 2 * np.sum(v*pos) #2 * v[2] * (c_light * dp_p / dp_e) * t_dp 
-            c = np.sum(pos ** 2) - self.det_dist ** 2
+            a = v[0]*v[0] + v[1]*v[1] + v[2]*v[2] #np.sum(v ** 2)
+            b = b = 2*v[2]*pos_z[i]
+            c = pos_z[i]**2 - self.det_dist ** 2
             if b ** 2 - 4 * a * c >= 0:
                 t_dm = (-b - np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
                 if t_dm >= 0:
                     if self.verbose:
                         print("adding weight", dp_wgt)
-                    self.time.append(t+t_dm)
+                    self.time.append(t[i]+t_dm)
                     self.energy.append((dp_momentum - dm_momentum)[0])
                     self.weight.append(dp_wgt)
                 t_dm = (-b + np.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
                 if t_dm >= 0:
                     if self.verbose:
                         print("adding weight", dp_wgt)
-                    self.time.append(t+t_dm)
+                    self.time.append(t[i]+t_dm)
                     self.energy.append((dp_momentum - dm_momentum)[0])
                     self.weight.append(dp_wgt)
 
