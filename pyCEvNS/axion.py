@@ -104,8 +104,8 @@ def _screening(e, ma):
 
 # Directional axion production from beam-produced photon distribution
 class PrimakoffAxionFromBeam:
-    def __init__(self, photon_rates, target_mass, target_z, target_photon_cross, detector_distance,
-                 detector_length, detector_area, axion_mass=1, axion_coupling=1e-3):
+    def __init__(self, photon_rates=[1.,1.,0.], target_mass=240e3, target_z=90, target_photon_cross=15e-24,
+                 detector_distance=4., detector_length=0.2, detector_area=0.04, axion_mass=0.1, axion_coupling=1e-3):
         self.photon_rates = photon_rates  # per second
         self.axion_mass = axion_mass  # MeV
         self.axion_coupling = axion_coupling  # MeV^-1
