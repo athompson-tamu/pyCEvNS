@@ -114,7 +114,7 @@ def SandwichSearch(generator, mass_array, g_array, save_file):
 
 
 def main(flux_file, save_dir, show_plots):
-    # @ # @ # # @ # @ # DECLARE EVENT GENERATIOR # @ # @ # # @ # @ #
+    # Declare event generators.
     flux = np.genfromtxt(flux_file)
     # 5% POT from beam dump
     axion_gen = PrimakoffAxionFromBeam(photon_rates=flux, target_mass=28e3, target_z=14,
@@ -123,7 +123,7 @@ def main(flux_file, save_dir, show_plots):
 
     
     
-    # @ # @ # # @ # @ # RUN THE LIMIT SCAN # @ # @ # # @ # @ #
+    # Run the scan.
     mass_array = np.logspace(-6, 4, 100)
     g_array = np.logspace(-13, -3, 100)
     save_file = save_dir + "dune_target_limits.txt"
@@ -142,8 +142,7 @@ def main(flux_file, save_dir, show_plots):
     
     
     
-    
-    # @ # @ # # @ # @ # PLOTTING # @ # @ # # @ # @ #
+    # Plotting.
     if show_plots == True:
     
         # TARGET
