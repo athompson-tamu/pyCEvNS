@@ -16,8 +16,6 @@ mp.dps = 15
 
 
 
-
-
 # Define cross-sections
 def primakoff_production_xs(energy, z, a, ma, g): #Tsai, '86
     if energy < ma:
@@ -101,51 +99,7 @@ def _screening(e, ma):
     numerator = 2*log(2*e/ma) - 1 - exp(-x) * (1 - exp(-x)/2) + (x + 0.5)*exp1(2*x) - (1+x)*exp1(x)
     denomenator = 2*log(2*e/ma) - 1
     return numerator / denomenator
-
-
-
-class AxionFlux:
-    def __init__(self, photon_flux, target_mass=240e3, target_z=90, target_photon_cross=15e-24,
-                 det_dist=4, det_length=0.2, det_area=0.04):
-        """
-        photon_flux: source photon array [[rate, energy, angle],...,[]] array in s^-1, MeV, radians
-        target_mass: mass of target atom in MeV
-        target_z: atomic number of target atom
-        target_photon_cross: SM photon absorption cross-section in target
-        det_dist: distance from target to detector in m
-        det_length: length of the detector along the direction from target to detector
-        det_area: cross-sectional area of the detector facing the photon/axion source
-        """
-        self.photon_flux = photon_flux  # per second
-        self.target_mass = target_mass  # target MeV
-        self.target_z = target_z
-        self.target_photon_cross = target_photon_cross  # cm^2
-        self.det_dist = det_dist  # meter
-        self.det_back = det_length + det_dist
-        self.det_length = det_length
-        self.det_area = det_area
-        self.axion_energy = []
-        self.axion_angle = []
-        self.decay_weight = []
-        self.scatter_weight = []
-        self.diphoton_angle = []
     
-    def decay_events(self, detection_time, threshold):
-        res = 0
-        for i in range(len(self.decay_weight)):
-            if self.axion_energy[i] >= threshold:
-                res += self.decay_weight[i]
-        return res * detection_time
-
-    def scatter_events(self, detector_number, detector_z, detection_time, threshold):
-        res = 0
-        for i in range(len(self.scatter_axion_weight)):
-            if self.axion_energy[i] >= threshold:
-                res += self.scatter_axion_weight[i] \
-                    * primakoff_scattering_xs(self.axion_energy[i], detector_z,
-                                              self.axion_mass, self.axion_coupling) \
-                    * detection_time * detector_number * meter_by_mev ** 2
-        return res
 
 
 # Directional axion production from beam-produced photon distribution
@@ -179,18 +133,14 @@ class PrimakoffAxionFromBeam:
     def get_beaming_angle(self, v):
         return np.arcsin(sqrt(1-v**2))
 
-    def simulate_single(self, photon, nsamples=100):
+    def simulate_single(self, photon, nsamples=100):        
+        data_tuple = ([], [], [], [], [])
+        
         if photon[1] < self.axion_mass:
-            return
+            return data_tuple
         rate = photon[0]
         e_gamma = photon[1]
         theta_gamma = photon[2]
-        
-        energies = []
-        thetas = []
-        scatter_weights = []
-        decay_weights = []
-        gamma_sep_thetas = []
         
         # Draw axion primakoff scattering angle
         cosphi_axion = np.random.uniform(-1, 1, nsamples)  # disk around photon
@@ -211,13 +161,13 @@ class PrimakoffAxionFromBeam:
 
         # Push back lists and weights
         for i in range(nsamples):
-            energies.append(e_gamma) # elastic limit
-            thetas.append(theta_axion[i])
-            scatter_weights.append(rate * br * surv_prob * in_solid_angle[i] / nsamples)
-            decay_weights.append(rate * br * surv_prob * decay_in_detector * in_solid_angle[i] / nsamples)
-            gamma_sep_thetas.append(np.arcsin(sqrt(1-axion_v**2))) # beaming formula for iso decay
+            data_tuple[0].append(e_gamma) # elastic limit
+            data_tuple[1].append(theta_axion[i])
+            data_tuple[2].append(rate * br * surv_prob * in_solid_angle[i] / nsamples)
+            data_tuple[3].append(rate * br * surv_prob * decay_in_detector * in_solid_angle[i] / nsamples)
+            data_tuple[4].append(np.arcsin(sqrt(1-axion_v**2))) # beaming formula for iso decay
         
-        return (energies, thetas, scatter_weights, decay_weights, gamma_sep_thetas)
+        return data_tuple
     
     def simulate(self, nsamples=10):
         self.axion_energy = []
