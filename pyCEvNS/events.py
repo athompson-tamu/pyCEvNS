@@ -10,7 +10,7 @@ from .flux import *
 from .helper import _poisson
 
 
-def formfsquared(q, rn=5.5, **kwargs):
+def formfsquared(q, rn=4.7, **kwargs):
     """
     form factor squared
     1810.05606
@@ -340,7 +340,7 @@ class DmEventsGen:
     Dark matter events generator for COHERENT
     """
     def __init__(self, dark_photon_mass, life_time, dark_matter_mass, expo=4466, detector_type='csi',
-                 detector_distance=19.3, pot_mu=0.75, pot_sigma=0.25, size=100000, smear=False, rn=5.5):
+                 detector_distance=19.3, pot_mu=0.75, pot_sigma=0.25, size=100000, smear=False, rn=4.7):
         self.dp_mass = dark_photon_mass
         self.tau = life_time
         self.dm_mass = dark_matter_mass
@@ -423,35 +423,6 @@ class DmEventsGen:
                                        self.smear, rn=self.rn, channel=channel) * probs[ti]
         return n_dm, n_meas 
 
-        """
-    def events(self, mediator_mass, epsilon, n_meas, channel="nucleus"):
-        """
-        #generate events according to the time and energy in measured data
-        #:param mediator_mass: mediator mass
-        #:param epsilon: mediator coupling to quark multiply by mediator coupling to dark matter
-        #:param n_meas: measured data
-        #:return: predicted number of event according to the time and energy in the measured data
-        """
-        # TODO (me): have to fix these hard-coded timing bins
-        pe_per_mev = 0.0878 * 13.348 * 1000
-        n_dm = np.zeros(n_meas.shape[0])
-        if len(self.fx.timing) == 0:
-            return n_dm
-        tmin = n_meas[:, 1].min()
-        plist = np.zeros(int((n_meas[:, 1].max()-tmin)/0.5)+1)
-        for tt in self.fx.timing:
-            if int((tt-tmin+0.25)/0.5) < plist.shape[0]:
-                plist[int((tt-tmin+0.25)/0.5)] += 1
-        plist /= self.fx.timing.shape[0]
-        for i in range(n_meas.shape[0]):
-            pe = n_meas[i, 0]
-            t = n_meas[i, 1]
-            # TODO: replace PE with raw energy input.
-            n_dm[i] = binned_events_dm((pe - 1)/pe_per_mev, (pe + 1)/pe_per_mev, self.expo,
-                                       self.det, self.fx, mediator_mass, epsilon, eff_coherent,
-                                       self.smear, rn=self.rn, channel=channel) * plist[int((t-tmin)/0.5)]
-        return n_dm
-        """
 
 class HelmFormFactor:
     """
@@ -478,6 +449,101 @@ def _inv(ev):
 
 def _invs(ev):
     return 1/ev**2
+
+
+
+# Event generator base class.
+# All other methods for detection rates should be children of this class.
+class EventGenerator:
+    def __init__(detector: Detector, flux, cross_section, efficiency=1.0, xedges=None,
+                 yedges=None, zedges=None, exposure=1.0):
+        self.det = detector
+        self.xs = cross_section
+        self.xedges = xedges
+        self.yedges = yedges
+        self.zedges = zedges
+        if xedges is not None:
+            self.xedges = (xedges[:-1] + xedges[1:])/2
+        if yedges is not None:
+            self.yedges = (yedges[:-1] + yedges[1:])/2
+        if zedges is not None:
+            self.zedges = (zedges[:-1] + zedges[1:])/2
+        self.eff = efficiency
+        self.exp = exposure  # must be in kg-days
+    
+    def scale(self):
+        return self.exp * mev_per_kg * 24 * 3600 / np.dot(det.m, det.frac)
+    
+    def events1D():
+        # rates is not a scalar, xedges not specified (raise error)
+        
+        try:
+            if hasattr(self.xs, '__call__'):
+                assert(xedges is not None)
+                return quad(self.xs, xedges[0], xedges[-1])[0] * self.scale()
+            else:
+                return self.scale() * self.rates * self.eff
+        except:
+            raise Exception("You must supply xedges (e.g. [first, last]) bin boundaries.")
+
+
+
+# Event generator base class for continuous rates function.
+class EventGeneratorContinuous:
+    def __init__(detector: Detector, rates, xedges=None, yedges=None, zedges=None,
+                 efficiency=1.0, exposure=1.0):
+        self.det = detector
+        self.rates = rates
+        self.rates_is_func = hasattr(self.rates, '__call__')
+        self.xedges = xedges
+        self.yedges = yedges
+        self.zedges = zedges
+        if xedges is not None:
+            self.xedges = (xedges[:-1] + xedges[1:])/2
+        if yedges is not None:
+            self.yedges = (yedges[:-1] + yedges[1:])/2
+        if zedges is not None:
+            self.zedges = (zedges[:-1] + zedges[1:])/2
+        self.eff = efficiency
+        self.exp = exposure  # must be in kg-days
+    
+    def scale(self):
+        return self.exp * mev_per_kg * 24 * 3600 / np.dot(det.m, det.frac)
+    
+    # 0-D event rate
+    def count():
+        # rates is not a scalar, xedges not specified (raise error)
+        try:
+            if self.rates_is_func:
+                assert(xedges is not None)
+                return quad(self.rates, xedges[0], xedges[-1])[0] * self.scale()
+            else:
+                return self.scale() * self.rates * self.eff
+        except:
+            raise Exception("You must supply xedges (e.g. [first, last]) bin boundaries.")
+    
+    # 1-D event rate
+    def events1D(self):
+        try:
+            assert(self.rates_is_func)
+        except:
+            raise AttributeError("self.rates must be function with 1st argument integrable. \n"
+                                 "Use count() to get the number of events with flat rate function.")
+        return [self.scale()*self.eff*quad(self.rates, xedges[i], xedges[i+1])[0] \
+                for i in range(len(self.xedges)-1)]
+    
+    # 2d events, e.g. energy, time
+    def events2D(self):
+        pass
+    
+    # 3d events, e.g. energy, time, theta
+    def events3D(self):
+        pass
+    
+    
+    
+    
+
 
 
 class NeutrinoNucleusElasticVector:
@@ -518,13 +584,13 @@ class NeutrinoNucleusElasticVector:
         fintinvs = np.zeros(detector.iso)
         emin = 0.5 * (np.sqrt(er ** 2 + 2 * er * detector.m) + er)
         for i in range(detector.iso):
-            fint[i] = flux.integrate(emin[i], flux.ev_max if flux.ev_max is not None else emin[i]+100, flavor)
-            fintinv[i] = flux.integrate(emin[i], flux.ev_max if flux.ev_max is not None else emin[i]+100, flavor, weight_function=_inv)
-            fintinvs[i] = flux.integrate(emin[i], flux.ev_max if flux.ev_max is not None else emin[i]+100, flavor, weight_function=_invs)
+            fint[i] = flux.integrate(emin[i], flux.ev_max, flavor)
+            fintinv[i] = flux.integrate(emin[i], flux.ev_max, flavor, weight_function=_inv)
+            fintinvs[i] = flux.integrate(emin[i], flux.ev_max, flavor, weight_function=_invs)
         res = np.dot(2 / np.pi * (gf ** 2) * (2 * fint - 2 * er * fintinv + er * er * fintinvs - detector.m * er * fintinvs) *
                      detector.m * qvs * self.form_factor_square(np.sqrt(2 * detector.m * er)), detector.frac)
-        if detector.detectoin_efficiency is not None:
-            res *= detector.detectoin_efficiency(er)
+        if detector.efficiency is not None:
+            res *= detector.efficiency(er)
         return res
 
     def events(self, ea, eb, flavor, flux: NeutrinoFlux, detector: Detector, exposure):
@@ -574,17 +640,18 @@ class NeutrinoElectronElasticVector:
                 0.5 * (np.real(epel[2, 1] * scale) * np.real(eper[2, 1] * scale) +
                        np.imag(epel[2, 1] * scale) * np.imag(eper[2, 1] * scale))
         emin = 0.5 * (np.sqrt(er ** 2 + 2 * er * me) + er)
-        fint = flux.integrate(emin, flux.ev_max if flux.ev_max is not None else emin+100, flavor)
-        fintinv = flux.integrate(emin, flux.ev_max if flux.ev_max is not None else emin+100, flavor, weight_function=_inv)
-        fintinvs = flux.integrate(emin, flux.ev_max if flux.ev_max is not None else emin+100, flavor, weight_function=_invs)
+        fint = flux.integrate(emin, flux.ev_max, flavor)
+        fintinv = flux.integrate(emin, flux.ev_max, flavor, weight_function=_inv)
+        fintinvs = flux.integrate(emin, flux.ev_max, flavor, weight_function=_invs)
+        #print(emin, fint)
         if flavor[-1] == 'r':
             tmp = epls
             epls = eprs
             eprs = tmp
         res = np.dot(2 / np.pi * (gf ** 2) * me * detector.z *
                      (epls * fint + eprs * (fint - 2 * er * fintinv + (er ** 2) * fintinvs) - eplr * me * er * fintinvs), detector.frac)
-        if detector.detectoin_efficiency is not None:
-            res *= detector.detectoin_efficiency(er)
+        if detector.efficiency is not None:
+            res *= detector.efficiency(er)
         return res
 
     def events(self, ea, eb, flavor, flux: NeutrinoFlux, detector: Detector, exposure):
@@ -676,14 +743,14 @@ class DMNucleusElasticVector:
         f2 = np.zeros(detector.iso)
         emin = 0.5 * (np.sqrt((er**2*detector.m+2*er*detector.m**2+2*er*flux.dm_m**2+4*detector.m*flux.dm_m**2)/detector.m) + er)
         for i in range(detector.iso):
-            f0[i] = flux.integrate(emin[i], flux.ev_max if flux.ev_max is not None else emin[i]+100, weight_function=flux.f0)
-            f1[i] = flux.integrate(emin[i], flux.ev_max if flux.ev_max is not None else emin[i]+100, weight_function=flux.f1)
-            f2[i] = flux.integrate(emin[i], flux.ev_max if flux.ev_max is not None else emin[i]+100, weight_function=flux.f2)
+            f0[i] = flux.integrate(emin[i], flux.ev_max, weight_function=flux.f0)
+            f1[i] = flux.integrate(emin[i], flux.ev_max, weight_function=flux.f1)
+            f2[i] = flux.integrate(emin[i], flux.ev_max, weight_function=flux.f2)
         res = np.dot(detector.frac, e_charge**4 * self.epsilon_dm**2 * self.epsilon_q**2 * detector.z**2 *
                       (2*detector.m*f2 - (er)*2*detector.m*f1 - (detector.m**2*er+flux.dm_m**2*er)*f0 + er**2*detector.m*f0) /
                           (4*np.pi*(2*detector.m*er+self.mediator_mass**2)**2) * self.form_factor_square(np.sqrt(2*detector.m*er)))
-        if detector.detectoin_efficiency is not None:
-            res *= detector.detectoin_efficiency(er)
+        if detector.efficiency is not None:
+            res *= detector.efficiency(er)
         return res
 
     def events(self, ea, eb, flux, detector: Detector, exposure):
@@ -743,17 +810,17 @@ class DMNucleusQuasiElasticVector:
 
     def rates(self, er, flux, detector: Detector):
         emin = 0.5 * (np.sqrt((er**2*massofp+2*er*massofp**2+2*er*flux.dm_m**2+4*massofp*flux.dm_m**2)/massofp) + er)
-        f0 = flux.integrate(emin, flux.ev_max if flux.ev_max is not None else emin+100, weight_function=flux.f0)
-        f1 = flux.integrate(emin, flux.ev_max if flux.ev_max is not None else emin+100, weight_function=flux.f1)
-        f2 = flux.integrate(emin, flux.ev_max if flux.ev_max is not None else emin+100, weight_function=flux.f2)
+        f0 = flux.integrate(emin, flux.ev_max, weight_function=flux.f0)
+        f1 = flux.integrate(emin, flux.ev_max, weight_function=flux.f1)
+        f2 = flux.integrate(emin, flux.ev_max, weight_function=flux.f2)
         ff1p = self.f1p(2*massofp*er*1e-6)
         ff2p = self.f2p(2*massofp*er*1e-6)
         res = np.dot(detector.frac, e_charge**4 * self.epsilon_dm**2 * self.epsilon_q**2 * detector.z**2 *
                      ((ff1p**2*2*massofp+ff2p**2*er)*f2 - (ff1p**2*2*massofp*er+er**2*ff2p**2)*f1 +
                       (-self.dm_mass**2*er*ff1p**2+0.25*ff2p**2*(er**2-2*massofp*er-4*self.dm_mass**2)+ff1p*ff2p*self.cc(er))*f0) /
                           (4*np.pi*(2*massofp*er+self.mediator_mass**2)**2) * self.form_factor_square(np.sqrt(2*detector.m*er)))
-        if detector.detectoin_efficiency is not None:
-            res *= detector.detectoin_efficiency(er)
+        if detector.efficiency is not None:
+            res *= detector.efficiency(er)
         return res
 
     def events(self, ea, eb, flux, detector: Detector, exposure):
@@ -779,13 +846,13 @@ class NeutrinoNucleusElasticScalar:
         emin = 0.5 * (np.sqrt(er ** 2 + 2 * er * detector.m) + er)
         fintinvs = np.zeros(detector.iso)
         for i in range(detector.iso):
-            fintinvs[i] = flux.integrate(emin[i], flux.ev_max if flux.ev_max is not None else emin[i]+100, flavor, weight_function=_invs)
+            fintinvs[i] = flux.integrate(emin[i], flux.ev_max, flavor, weight_function=_invs)
         if self.form_factor_square is not None:
             res = np.dot(1 / (4*np.pi) * detector.m**2 * cn**2 * er / (2*detector.m*er+self.ms**2)**2 * fintinvs * self.form_factor_square(np.sqrt(2*detector.m*er)), detector.frac)
         else:
              res = np.dot(1 / (4*np.pi) * detector.m**2 * cn**2 * er / (2*detector.m*er+self.ms**2)**2 * fintinvs, detector.frac)
-        if detector.detectoin_efficiency is not None:
-            res *= detector.detectoin_efficiency(er)
+        if detector.efficiency is not None:
+            res *= detector.efficiency(er)
         return self.sm_interaction.rates(er, flavor, flux, detector) + res
 
     def events(self, ea, eb, flavor, flux: NeutrinoFlux, detector: Detector, exposure):
@@ -833,13 +900,13 @@ class NeutrinoNucleusElascticVectorQ2:
         fintinvs = np.zeros(detector.iso)
         emin = 0.5 * (np.sqrt(er ** 2 + 2 * er * detector.m) + er)
         for i in range(detector.iso):
-            fint[i] = flux.integrate(emin[i], flux.ev_max if flux.ev_max is not None else emin[i]+100, flavor)
-            fintinv[i] = flux.integrate(emin[i], flux.ev_max if flux.ev_max is not None else emin[i]+100, flavor, weight_function=_inv)
-            fintinvs[i] = flux.integrate(emin[i], flux.ev_max if flux.ev_max is not None else emin[i]+100, flavor, weight_function=_invs)
+            fint[i] = flux.integrate(emin[i], flux.ev_max, flavor)
+            fintinv[i] = flux.integrate(emin[i], flux.ev_max, flavor, weight_function=_inv)
+            fintinvs[i] = flux.integrate(emin[i], flux.ev_max, flavor, weight_function=_invs)
         res = np.dot(2 / np.pi * (gf ** 2) * (2 * fint - 2 * er * fintinv + er * er * fintinvs - detector.m * er * fintinvs) *
                      detector.m * qvs * self.form_factor_square(np.sqrt(2 * detector.m * er)) * 2*detector.m*er/self.lmd**2, detector.frac)
-        if detector.detectoin_efficiency is not None:
-            res *= detector.detectoin_efficiency(er)
+        if detector.efficiency is not None:
+            res *= detector.efficiency(er)
         return res
 
     def events(self, ea, eb, flavor, flux: NeutrinoFlux, detector: Detector, exposure):

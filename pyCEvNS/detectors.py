@@ -20,7 +20,7 @@ class Detector:
         :param det_type: name of the detector
         """
         self.det_type = det_type
-        self.detectoin_efficiency = efficiency
+        self.efficiency = efficiency
         fpath = pkg_resources.resource_filename(__name__, 'data/det_init.json')
         f = open(fpath, 'r')
         det_file = json.load(f)
@@ -86,4 +86,4 @@ class Detector:
                     raise Exception("No such detector in det_init.json.")
 
     def change_parameters(self, efficiency=None):
-        self.detectoin_efficiency = efficiency if efficiency is not None else self.detectoin_efficiency
+        self.efficiency = efficiency if efficiency is not None else self.efficiency

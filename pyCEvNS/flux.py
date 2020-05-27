@@ -552,6 +552,14 @@ class NeutrinoFlux:
                              'ebar': delta_fluxes['ebar'] if 'ebar' in delta_fluxes else None,
                              'mubar': delta_fluxes['mubar'] if 'mubar' in delta_fluxes else None,
                              'taubar': delta_fluxes['taubar'] if 'taubar' in delta_fluxes else None}
+            for flavor in self.delta_nu: # grab the maximum energy of the delta fluxes
+                if self.delta_nu[flavor] is None:
+                    continue
+                energies = [self.delta_nu[flavor][i][0] for i in range(len(self.delta_nu[flavor]))]
+                if self.ev_max is None or max(energies) > self.ev_max:
+                    self.ev_max = max(energies)
+            print(self.ev_max)
+                    
         else:
             raise Exception("'delta_fluxes' must be a dictionary of a list of tuples! e.g. {'e': [(12, 4), (14, 15)], ...}")
 
@@ -585,7 +593,7 @@ class NeutrinoFlux:
         res = 0
         if self.delta_nu is not None and self.delta_nu[flavor] is not None:
             for deltas in self.delta_nu[flavor]:
-                if ea < deltas[0] < eb:
+                if ea < deltas[0] <= eb:  # self.ev_max should be included with <=
                     res += deltas[1] if weight_function is None else deltas[1]*weight_function(deltas[0])
         if self.nu is not None and self.nu[flavor] is not None:
             if weight_function not in self.precalc:
