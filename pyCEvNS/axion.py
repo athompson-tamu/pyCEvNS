@@ -56,7 +56,7 @@ def primakoff_production_cdf(theta, energy, z, ma):
 # Quantile (inverse CDF) for the Primakoff production angular distribution
 def primakoff_prod_quant(energy, z, ma, nsamples=1):
     u = np.random.uniform(0,1,nsamples)
-    _theta_list = np.linspace(0, pi, 25)
+    _theta_list = np.linspace(0, pi, 35)
     norm = quad(primakoff_production_diffxs, 0, pi, args=(energy,z,ma))[0]
     if norm == 0:
         return math.nan
@@ -203,6 +203,14 @@ class PrimakoffAxionFromBeam:
                                               self.axion_mass, self.axion_coupling) \
                     * detection_time * detector_number * meter_by_mev ** 2
         return res
+    
+    def detect(self, detector_number, detector_z, detection_time, threshold):
+        for i in range(len(self.scatter_axion_weight)):
+            if self.axion_energy[i] >= threshold:
+                self.scatter_axion_weight[i] *= self.scatter_axion_weight[i] \
+                    * primakoff_scattering_xs(self.axion_energy[i], detector_z,
+                                              self.axion_mass, self.axion_coupling) \
+                    * detection_time * detector_number * meter_by_mev ** 2
 
 
 

@@ -15,6 +15,7 @@ brem_flux = DMFluxIsoPhoton(brem_photons, dark_photon_mass=75, coupling=1,
                             pot_sigma=0.05, sampling_size=100, life_time=0.0001,
                             detector_distance=20, brem_suppress=True, verbose=False)
 
+
 pim_rate=0.45
 pim_flux = DMFluxFromPiMinusAbsorption(dark_photon_mass=75, coupling_quark=1,
                                         dark_matter_mass=25,
@@ -35,7 +36,7 @@ profiler = Profile()
 
 
 
-profiler.runcall(lambda: pim_flux.simulate())
+profiler.runcall(lambda: brem_flux.simulate())
 stats = Stats(profiler)
 stats.strip_dirs()
 stats.sort_stats("cumulative")

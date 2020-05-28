@@ -7,6 +7,12 @@ from scipy.special import exp1
 
 from pyCEvNS.axion import PrimakoffAxionFromBeam
 
+from matplotlib.pylab import rc
+
+
+rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
+rc('text', usetex=True)
+
 # Declare constants.
 hbar = 6.58212e-22  # MeV*s
 c_light = 2.998e8  # m/s
@@ -16,13 +22,22 @@ s_per_day = 3600*24
 pot_per_year = 1.1e21
 
 
-def runGenerator(flux):
-    generator = PrimakoffAxionFromBeam(photon_rates=flux, axion_mass=0.001, axion_coupling=5e-8, target_mass=28e3,
+# detector constants
+det_mass = 50000
+det_am = 37.211e3  # mass of target atom in MeV
+det_z = 18  # atomic number
+days = 1000  # days of exposure
+det_area = 3*6  # cross-sectional det area
+det_thresh = 0  # energy threshold
+sig_limit = 2.0  # poisson significance (2 sigma)
+
+def runGenerator(flux, ma, g):
+    generator = PrimakoffAxionFromBeam(photon_rates=flux, axion_mass=ma, axion_coupling=g, target_mass=28e3,
                                 target_z=14, target_photon_cross=1e-24, detector_distance=304,
-                                detector_length=6, detector_area=21)
-    generator.simulate(100)
+                                detector_length=6, detector_area=50)
+    generator.simulate(20000)
     print(len(generator.axion_angle))
-    return generator.axion_angle, generator.gamma_sep_angle
+    return generator
 
 
 
@@ -40,8 +55,8 @@ def main():
     flux = np.array(list(zip(gamma_wgt,gamma_e,gamma_theta)))
 
     # make weighted histogram of flux
-    energy_edges = np.linspace(0, 10000, 20)
-    theta_edges = np.linspace(0, 1.5, 20)
+    energy_edges = np.linspace(0, 10000, 120)
+    theta_edges = np.linspace(0, 1.5, 60)
     hist_flux = np.histogram2d(gamma_e, gamma_theta, weights=gamma_wgt, bins=[energy_edges,theta_edges])
     hist_weights = hist_flux[0]
     energy_bins = (energy_edges[:-1] + energy_edges[1:]) / 2
@@ -60,16 +75,67 @@ def main():
     
     
 
-    axion_angles, deltatheta = runGenerator(binned_flux)
+    axion_gen = runGenerator(binned_flux, 1, 5e-8)
+    axion_gen_001 = runGenerator(binned_flux, 0.1, 5e-8)
+    axion_gen_100 = runGenerator(binned_flux, 10, 5e-8)
+    axion_gen_1000 = runGenerator(binned_flux, 500, 5e-10)
+    axion_angles = axion_gen.axion_angle
+    deltatheta = axion_gen.gamma_sep_angle
+    axion_energies = axion_gen.axion_energy
     axion_angles = [180*x/np.pi for x in axion_angles]
     deltatheta = [180*x/np.pi for x in deltatheta]
+    
+     # Plot photon energies from ALP scattering at detector
+    density=True
+    alp_energy_edges = np.linspace(0,10000,20)
+    plt.hist(axion_gen.axion_energy, weights=axion_gen.decay_axion_weight, bins=alp_energy_edges,
+             histtype='step', label=r"$m_a = 1$ MeV", density=density)
+    plt.hist(axion_gen_100.axion_energy, weights=axion_gen_100.decay_axion_weight, bins=alp_energy_edges,
+             histtype='step', label=r"$m_a = 10$ MeV", density=density)
+    plt.hist(axion_gen_1000.axion_energy, weights=axion_gen_1000.decay_axion_weight, bins=alp_energy_edges,
+             histtype='step', label=r"$m_a = 0.5$ GeV", density=density)
+    plt.title(r"$a \to \gamma \gamma$", loc="right")
+    plt.xlabel(r"$E_{\gamma\gamma}$ [MeV]", fontsize=15)
+    plt.ylabel("a.u.")
+    plt.ylim(bottom=0)
+    plt.legend()
+    plt.show()
+    plt.clf()
+    
+    # pass scatter axions through det
+    axion_gen.detect(det_mass * mev_per_kg / det_am, det_z, days*s_per_day, det_thresh)
+    axion_gen_001.detect(det_mass * mev_per_kg / det_am, det_z, days*s_per_day, det_thresh)
+    axion_gen_100.detect(det_mass * mev_per_kg / det_am, det_z, days*s_per_day, det_thresh)
+    axion_gen_1000.detect(det_mass * mev_per_kg / det_am, det_z, days*s_per_day, det_thresh)
+    
+    
+    
+    # Plot axion energies at detector
+    density=True
+    alp_energy_edges = np.linspace(0,15000,30)
+    plt.hist(axion_gen_001.axion_energy, weights=axion_gen_001.scatter_axion_weight, bins=alp_energy_edges,
+             histtype='step', label=r"$m_a = 10$ keV", density=density)
+    plt.hist(axion_gen.axion_energy, weights=axion_gen.scatter_axion_weight, bins=alp_energy_edges,
+             histtype='step', label=r"$m_a = 1$ MeV", density=density)
+    plt.hist(axion_gen_100.axion_energy, weights=axion_gen_100.scatter_axion_weight, bins=alp_energy_edges,
+             histtype='step', label=r"$m_a = 10$ MeV", density=density)
+    plt.title(r"$a Z \to \gamma Z$", loc="right")
+    plt.xlabel(r"$E_\gamma$ [MeV]", fontsize=15)
+    plt.ylabel("a.u.")
+    plt.ylim(bottom=0)
+    plt.legend(loc="upper left")
+    plt.show()
+    plt.clf()
+    
+    
+   
 
 
     # Plot the axion angular distribution
     angle_edges = np.linspace(0, 180, 100)
     plt.hist(axion_angles, bins=angle_edges, density=True, histtype="step", label=r"$a$ in target")
     plt.hist(180*gamma_theta/np.pi, weights=gamma_wgt, bins=angle_edges, density=True, histtype="step", label=r"$\gamma$ in target (Pythia8)")
-    plt.xlabel(r"$\theta$ [deg]", fontsize=15)
+    plt.xlabel(r"$\theta_z$ [deg]", fontsize=15)
     plt.title(r"$m_a = 5$ MeV", loc="right", fontsize=15)
     plt.ylim(bottom=0)
     plt.legend()

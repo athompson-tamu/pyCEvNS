@@ -72,11 +72,11 @@ def get_energy_bins(e_a, e_b):
 # Set up energy and timing bins
 hi_energy_cut = 300  # mev
 lo_energy_cut = 0.0  # mev
-hi_timing_cut = 2.0
-lo_timing_cut = 0.0
-energy_edges = np.linspace(lo_energy_cut, hi_energy_cut,51) #get_energy_bins(lo_energy_cut, hi_energy_cut)
+hi_timing_cut = 0.25
+lo_timing_cut = 0.1
+energy_edges = np.linspace(lo_energy_cut, hi_energy_cut,48) #get_energy_bins(lo_energy_cut, hi_energy_cut)
 energy_bins = (energy_edges[:-1] + energy_edges[1:]) / 2
-timing_edges = np.linspace(lo_timing_cut, hi_timing_cut, 51)
+timing_edges = np.linspace(lo_timing_cut, hi_timing_cut, 48)
 timing_bins = (timing_edges[:-1] + timing_edges[1:]) / 2
 
 n_meas = np.zeros((energy_bins.shape[0] * len(timing_bins), 2))
@@ -96,6 +96,7 @@ flat_times = n_meas[:,1]
 # Get neutrino spectrum
 flux_factory = NeutrinoFluxFactory()
 prompt_flux = flux_factory.get('jsns_prompt')
+prompt_continuous = flux_factory.get('jsns_prompt_continuous')
 delayed_flux = flux_factory.get('jsns_delayed')
 det = Detector("jsns_scintillator")
 nsi = NSIparameters(0)
@@ -108,6 +109,9 @@ for i in range(0, energy_bins.shape[0]):
     e_b = energy_edges[i + 1]
     n_prompt[flat_index] = efficiency(energy_bins[i] * pe_per_mev) * \
                   gen.events(e_a, e_b, 'mu', prompt_flux, det, exposure) * \
+                    prompt_prob(timing_edges[j], timing_edges[j+1])
+    n_prompt[flat_index] += efficiency(energy_bins[i] * pe_per_mev) * \
+                  gen.events(e_a, e_b, 'mu', prompt_continuous, det, exposure) * \
                     prompt_prob(timing_edges[j], timing_edges[j+1])
     n_delayed[flat_index] = efficiency(energy_bins[i] * pe_per_mev) * \
                    (gen.events(e_a, e_b, 'e', delayed_flux, det, exposure)
@@ -159,8 +163,8 @@ def GetDMEvents(m_chi, m_dp, m_med, g, lifetime=0.001):
 
     return brem_events + pim_events + pi0_events
 
-dm_events1 = GetDMEvents(m_chi=2, m_dp=75, m_med=75, g=1e-4)
-dm_events2 = GetDMEvents(m_chi=25, m_dp=75, m_med=75, g=1e-4)
+dm_events1 = GetDMEvents(m_chi=1, m_dp=3, m_med=3, g=3.16*5e-5/45)
+dm_events2 = GetDMEvents(m_chi=25, m_dp=75, m_med=75, g=0.5e-4)
 
 
 
@@ -170,17 +174,23 @@ dm_events2 = GetDMEvents(m_chi=25, m_dp=75, m_med=75, g=1e-4)
 density = False
 plt.hist([flat_energies,flat_energies], weights=[n_prompt, n_delayed], bins=energy_edges,
          stacked=True, histtype='stepfilled', density=density, color=['teal','tan'], label=["Prompt", "Delayed"])
-plt.hist(flat_energies,weights=dm_events1,bins=energy_edges,
-         histtype='step', density=density, label=r"DM ($M_{A^\prime} = 75$ MeV)")
-plt.hist(flat_energies,weights=dm_events2,bins=energy_edges,
-         histtype='step', density=density, label=r"DM ($M_{A^\prime} = 300$ MeV)")
-plt.xlabel(r"$E_r$ [MeVer]")
+plt.hist(flat_energies,weights=dm_events1,bins=energy_edges, color='blue',
+         histtype='step', density=density, label=r"DM ($m_\chi = 1$ MeV, $m_V = 3$ MeV)")
+plt.hist(flat_energies,weights=dm_events2,bins=energy_edges, color='crimson',
+         histtype='step', density=density, label=r"DM ($m_\chi = 25$ MeV, $m_V = 75$ MeV)")
+plt.vlines(30, 0, 1e10, ls='dashed')
+plt.arrow(30, 3e3, 6, 0, head_width=250, head_length=4, color='k')
+
+plt.xlabel(r"$E_r$ [MeVee]", fontsize=15)
 plt.yscale("log")
-plt.ylabel(r"Events")
-plt.title(r"$\epsilon=10^{-4}$, $M_X = 25$ MeV, $m_{\chi} = 5$ MeV, timing cut $0.1 < t < 0.25$ $\mu$s", loc='right')
+plt.ylabel(r"Events", fontsize=15)
+plt.title(r"JSNS$^2$, $0.1 < t < 0.25$ $\mu$s", loc='right', fontsize=15)
 plt.xlim((lo_energy_cut,hi_energy_cut))
-plt.legend()
-plt.savefig("plots/jsns2/neutrino_dm_spectra_25e-2mus.png")
+plt.ylim((1e-1, 1e4))
+plt.xticks(fontsize=13)
+plt.yticks(fontsize=13)
+plt.legend(fontsize=12, loc="upper right", framealpha=1.0)
+plt.tight_layout()
 plt.show()
 plt.clf()
 
@@ -188,7 +198,6 @@ plt.clf()
 dm_events1 = GetDMEvents(m_chi=25, m_dp=75, m_med=25, g=1e-4, lifetime=0.001)
 dm_events2 = GetDMEvents(m_chi=25, m_dp=75, m_med=25, g=2e-4, lifetime=1)
 dm_events3 = GetDMEvents(m_chi=5, m_dp=138, m_med=25, g=2e-4, lifetime=1)
-print(np.sum(dm_events1), np.sum(dm_events2), np.sum(dm_events3))
 
 density = True
 plt.hist([flat_times,flat_times], weights=[n_prompt, n_delayed], bins=timing_edges,

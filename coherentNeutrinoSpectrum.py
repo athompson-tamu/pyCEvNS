@@ -64,13 +64,15 @@ def efficiency(pe):
 
 
 hi_energy_cut = 52/pe_per_mev
-lo_energy_cut = 0/pe_per_mev
+lo_energy_cut = 16/pe_per_mev
 hi_timing_cut = 1.75
 lo_timing_cut = 0.0
 energy_edges = np.arange(lo_energy_cut, hi_energy_cut, 2/pe_per_mev) # energy resolution ~2keV
 energy_bins = (energy_edges[:-1] + energy_edges[1:]) / 2
 timing_edges = np.arange(lo_timing_cut, hi_timing_cut, 0.5) # 0.5 mus time resolution
 timing_bins = (timing_edges[:-1] + timing_edges[1:]) / 2
+
+print(timing_bins)
 
 indx = []
 # energy cut is 14keV ~ 16pe
@@ -104,6 +106,7 @@ n_obs_err = np.sqrt(obs_hist + (0.28*obs_hist)**2)  # poisson error + systematic
 
 print(obs_hist.shape[0], n_obs_err.shape[0])
 
+
 # Get background
 n_bg = ac_bon_meas[:, 2]
 
@@ -132,7 +135,11 @@ for i in range(0, energy_bins.shape[0]):
         flat_index += 1
 
 n_nu = n_prompt+n_delayed
-
+print("nu = ", np.sum(n_nu))
+print("Bkg = ", np.sum(ac_bon_meas[:,2]))
+print("obs = ", np.sum(n_obs))
+print("excess = ", np.sum(n_obs) - np.sum(n_nu) - np.sum(ac_bon_meas[:,2]))
+print("sig = ", (np.sum(n_obs) - np.sum(n_nu) - np.sum(ac_bon_meas[:,2]))/(np.sqrt(np.sum(n_nu) + np.sum(ac_bon_meas[:,2]))))
 
 # Get DM events.
 brem_photons = np.genfromtxt("data/coherent/brem.txt")  # binned photon spectrum from
