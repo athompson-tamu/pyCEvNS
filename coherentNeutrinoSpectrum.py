@@ -64,7 +64,7 @@ def efficiency(pe):
 
 
 hi_energy_cut = 52/pe_per_mev
-lo_energy_cut = 16/pe_per_mev
+lo_energy_cut = 0/pe_per_mev
 hi_timing_cut = 1.75
 lo_timing_cut = 0.0
 energy_edges = np.arange(lo_energy_cut, hi_energy_cut, 2/pe_per_mev) # energy resolution ~2keV
@@ -182,9 +182,10 @@ def GetDMEvents(g, m_dp, m_chi, m_med):
 
 
 
-dm_events1 = GetDMEvents(m_chi=1, m_dp=75, m_med=25, g=0.75e-7)
-dm_events2 = GetDMEvents(m_chi=20, m_dp=120, m_med=25, g=0.75e-7)
-dm_best_fit = GetDMEvents(m_chi=25, m_dp=75, m_med=47, g=5e-8)
+m_dp_bf = np.power(10, 0.213973009690852356e1)
+m_chi_bf = m_dp_bf/3
+eps_bf = np.power(10,-0.708361403497243902e1)
+dm_best_fit = GetDMEvents(m_chi=m_chi_bf, m_dp=m_dp_bf, m_med=m_dp_bf, g=eps_bf)
 
 
 # Plot best-fit
@@ -197,10 +198,10 @@ plt.hist([kevnr,kevnr,kevnr,kevnr], weights=[n_prompt, n_delayed, n_bg, dm_best_
          color=['teal','tan', 'indianred', 'lightsteelblue'],
          label=[r"Prompt $\nu$", r"Delayed $\nu$", "AC Beam-On Background", r"$\chi N \to \chi N$ Best-fit"])
 plt.errorbar(kevnr_bins,obs_hist,yerr=n_obs_err,label=r"Beam-On data", color='k', ls='none', marker='o')
-plt.vlines(14, 0, 100, ls='dashed')
-plt.vlines(26, 0, 100, ls='dashed')
-plt.arrow(14, 30, 2, 0, head_width=1, color='k')
-plt.arrow(26, 30, -2, 0, head_width=1, color='k')
+plt.vlines(kevnr_edges[8], 0, 100, ls='dashed')
+plt.vlines(kevnr_edges[16], 0, 100, ls='dashed')
+plt.arrow(kevnr_edges[8], 30, 2, 0, head_width=1, color='k')
+plt.arrow(kevnr_edges[16], 30, -2, 0, head_width=1, color='k')
 plt.xlabel(r"$E_r$ [MeV]", fontsize=15)
 plt.ylabel(r"Events", fontsize=15)
 plt.title(r"COHERENT CsI, $t < 1.5$ $\mu$s", loc="right", fontsize=15)
@@ -209,10 +210,12 @@ plt.xlim((0,42.5))
 plt.legend(fontsize=13, framealpha=1, loc='upper right')
 plt.xticks(fontsize=13)
 plt.yticks(fontsize=13)
+plt.tight_layout()
 plt.show()
 plt.clf()
 
-
+dm_events1 = GetDMEvents(m_chi=1, m_dp=75, m_med=25, g=0.75e-7)
+dm_events2 = GetDMEvents(m_chi=20, m_dp=120, m_med=25, g=0.75e-7)
 
 # Plot Dark Matter against Neutrino Spectrum
 density = False
