@@ -1,13 +1,43 @@
-# pyCEvNS - an open-source CEvNS calculator with MCMC sampling of new physics parameters and experimental systematics
-pyCEvNS is an effort advanced by phenomenologists and experimentalists within the coherent, elastic neutrino-nucleus scattering (CEvNS) community.
-The goal is to provide a robust, (relatively) easy-to-use tool for *performing calculations of the CEvNS differential cross section* defining the expected distribution of CEvNS events in nuclear-recoil energy space.
+# pyCEvNS -- an open-source CEvNS calculator with MCMC sampling of new physics parameters and experimental systematics
 
-A key component of pyCEvNS is the use of Markov Chain Monte Carlo sampling to incorporate the effects both of new physics and of uncertainties in the recoil calculation.
-This allows for robust analyses of CEvNS data, including the ability to incorporate multiple experimental inputs.
+This package provides convenient methods for calculting neutrino experiment events and fitting new physics parameter.
 
-# Status
-As of April 2018, development is in its early stages.
-Usage notes and contribution guidelines will be added to this and other READMEs as development advances.
+## Basic usage
 
-# Initial contributors
-The pyCEvNS project was started by members of Texas A&M University, Duke University, and the University of Chicago.
+import ingredient:
+```python
+from pyCEvNS.flux import *
+from pyCEvNS.oscillation import *
+from pyCEvNS.detectors import *
+from pyCEvNS.events import *
+```
+
+define your neutrino flux, detector, and neutrino interaction:
+```python
+det = Detector('csi', efficiency=eff_coherent)
+flux = NeutrinoFluxFactory().get('coherent')
+interaction = NeutrinoNucleusElasticVector(NSIparameters(), HelmFormFactor(5.5))
+exposure = 4466
+```
+
+calculate the events:
+```python
+print(interaction.events(det.er_min, det.er_max, 'e', flux, det, exposure) + 
+      interaction.events(det.er_min, det.er_max, 'ebar', flux, det, exposure)+
+     interaction.events(det.er_min, det.er_max, 'mu', flux, det, exposure)+
+     interaction.events(det.er_min, det.er_max, 'mubar', flux, det, exposure)+
+     interaction.events(det.er_min, det.er_max, 'tau', flux, det, exposure)+
+     interaction.events(det.er_min, det.er_max, 'taubar', flux, det, exposure))
+```
+```python
+138.46516348290166
+```
+
+### Oscllations
+The neutrino flux can go through a long distance and oscillate, this can be done via:
+```python
+fs = NeutrinoFluxFactory().get('solar')
+osc = OscillatorFactory().get('solar')
+fs = osc.transform(fs)
+```
+Now ``fs`` is the oscillated flux at the detector.

@@ -1,0 +1,16 @@
+#!/bin/bash
+#SBATCH -J priorflow
+#SBATCH -p mpi-core8
+#SBATCH -N 19
+#SBATCH --ntasks-per-node=8
+#SBATCH --cpus-per-task=1
+#SBATCH --mem-per-cpu=4000
+#SBATCH -o %j.out
+#SBATCH -e %j.err
+
+
+srun --mpi=pmi2 --resv-ports python runMultinestPriorFlow.py <<EOF
+mpi_warn_on_fork = 0
+EOF
+
+exit 0

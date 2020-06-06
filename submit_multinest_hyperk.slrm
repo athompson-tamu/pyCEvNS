@@ -1,0 +1,12 @@
+#!/bin/bash
+#SBATCH -J hyperk_atmos
+#SBATCH -p mpi-core8
+#SBATCH -N 5
+#SBATCH --ntasks-per-node=8
+#SBATCH --cpus-per-task=1
+#SBATCH --mem-per-cpu=3000
+#SBATCH -o %j.out
+#SBATCH -e %j.err
+
+srun --mpi=pmi2 --resv-ports python runMultinestAtmosphericHyperK.py
+exit 0
