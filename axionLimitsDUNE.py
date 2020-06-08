@@ -27,51 +27,67 @@ pot_per_year = 1.1e21
 det_mass = 50000
 det_am = 37.211e3  # mass of target atom in MeV
 det_z = 18  # atomic number
-days = 1000  # days of exposure
-det_area = 3*6  # cross-sectional det area
+days = 5*364  # days of exposure
+det_area = 3*7  # cross-sectional det area
 det_thresh = 0.028e-3  # energy threshold
-sig_limit = 2.0  # poisson significance (2 sigma)
+sig_limit = 1.0  # poisson significance (2 sigma)
 
 
 
 def grad_desc(f, w0, delta0, alpha):
+    # Set up empty list of points w and functions f(w)
     fs = []
     ws = []
+
+    # Stopping criterion
+    crit = 0.1  # distance from the minimum of the function (0)
     
+    # Get the first two points
     fs.extend([f(w0), f(w0+delta0)])
     ws.extend([w0, w0+delta0])
     
+    # Get the first derivative of the first 2 points
     delta_f0 = (fs[1] - fs[0])/(ws[1] - ws[0])
     k = 2
+
+    # Append the 2nd point using the gradient descent step
     ws.append(ws[1] - alpha*delta_f0)  # w_2
-    print(ws, fs)
-    while abs(fs[k-1]) > 0.1:
+    print("k=2, ", ws, fs)
+    while abs(fs[k-1]) > crit:
+        print("k = ", k)
         fs.append(f(ws[k]))  # append f_k
         delta_fk = (fs[k] - fs[k-1])/(ws[k] - ws[k-1])
         ws.append(ws[k] - alpha*delta_fk)
-        print(ws, fs)
+        print("deltafk = ", alpha*delta_fk)
+        print("(ws, fs) = (%0.3f, %0.3f)" % (ws[k], fs[k]))
+        k += 1
+    
+    return ws[-2]
 
 
-def fsolve_limits(alp_gen, mass_array):
-    m_list = []
-    g_list = []
-    
-    def test_stat(logg):
-        alp_gen.axion_coupling = np.power(10.0, logg)
-        alp_gen.simulate()
-        counts = alp_gen.decay_events(days*s_per_day, det_thresh)
-        counts += alp_gen.scatter_events(det_mass * mev_per_kg / det_am, det_z, days*s_per_day, det_thresh)
-        return sqrt(counts)
-    
-    for m in mass_array:
-        alp_gen.axion_mass = m
-        roots = grad_desc(test_stat, w0=0, delta0=1, alpha=0.5)
-        print(roots, m)
-        m_list.append(m)
-        g_list.append(roots)
-    
-    return m_list, g_list
+def GradientDescent(generator, mass_array, g_array, save_file):
+    upper_array = np.zeros_like(mass_array)
+    lower_array = np.ones_like(mass_array)
+    print("starting scan...")
+    for i in range(mass_array.shape[0]):
+        generator.axion_mass = mass_array[i]
+
+        def EventsGenerator(logg):
+            generator.axion_coupling = 10.0**logg
+            generator.simulate()
+            ev = generator.decay_events(days*s_per_day, det_thresh)
+            ev += generator.scatter_events(det_mass * mev_per_kg / det_am, det_z, days*s_per_day, det_thresh)
+            return 2-sqrt(ev)
         
+        # Lower limit:
+        g0_lower = -10
+        g_value = grad_desc(EventsGenerator, g0_lower, 1.2, 10)
+        lower_array[i] = g_value
+
+
+    limits_array = [mass_array, lower_array, upper_array]
+    np.savetxt(save_file, limits_array)
+    return limits_array
 
 
 def SandwichSearch(generator, mass_array, g_array, save_file):
@@ -80,30 +96,34 @@ def SandwichSearch(generator, mass_array, g_array, save_file):
     print("starting scan...")
     for i in range(mass_array.shape[0]):
         generator.axion_mass = mass_array[i]
+        print("\n **** SETTING ALP MASS = %0.3f MeV **** \n" % mass_array[i])
+
+        
         # lower bound
-        print("scanning lower bound...")
+        print(" *********** scanning lower bound...")
         for g in g_array:
-            print("trying g = ", g, " MeV^-1")
+            print("TRYING g = ", g, " MeV^-1")
             generator.axion_coupling = g
             generator.simulate()
             ev = generator.decay_events(days*s_per_day, det_thresh)
             ev += generator.scatter_events(det_mass * mev_per_kg / det_am, det_z, days*s_per_day, det_thresh)
             sig = sqrt(ev)
-            print(ev)
             if sig > sig_limit:
+                print("FOUND DELTA CHI2 = %0.3f" % sig)
                 lower_array[i] = g
                 break
-
+        
         # upper bound
-        print("scanning upper bound...")
+        print(" ********** scanning upper bound...")
         for g in g_array[::-1]:
-            print("trying g = ", g, " MeV^-1")
+            print("TRYING g = ", g, " MeV^-1")
             generator.axion_coupling = g
             generator.simulate()
             ev = generator.decay_events(days*s_per_day, det_thresh)
             ev += generator.scatter_events(det_mass * mev_per_kg / det_am, det_z, days*s_per_day, det_thresh)
             sig = sqrt(ev)
             if sig > sig_limit:
+                print("FOUND DELTA CHI2 = %0.3f" % sig)
                 upper_array[i] = g
                 break
 
@@ -119,13 +139,13 @@ def main(flux_file, save_dir, show_plots):
     # 5% POT from beam dump
     axion_gen = PrimakoffAxionFromBeam(photon_rates=flux, target_mass=28e3, target_z=14,
                                               target_photon_cross=1e-24, detector_distance=304,
-                                              detector_length=6, detector_area=50)  # not sure about area and length
+                                              detector_length=14, detector_area=det_area)  # not sure about area and length
 
     
     
     # Run the scan.
-    mass_array = np.logspace(-6, 4, 100)
-    g_array = np.logspace(-13, -3, 100)
+    mass_array = np.logspace(-2, 4, 100)
+    g_array = np.logspace(-13, -3, 50)
     save_file = save_dir + "dune_target_limits.txt"
     rerun = True
     if rerun == True:
@@ -140,10 +160,10 @@ def main(flux_file, save_dir, show_plots):
     lower_limit_target = limits_target[1]
     
     
-    
+    print(show_plots)
     
     # Plotting.
-    if show_plots == True:
+    if show_plots:
     
         # TARGET
         # Find where the upper and lower arrays intersect at the tongue and clip
@@ -171,7 +191,7 @@ def main(flux_file, save_dir, show_plots):
         sn1987a_lower = np.genfromtxt("data/existing_limits/sn1987a_lower.txt", delimiter=",")
 
         plt.plot(joined_masses_target*1e6, joined_limits_target*1e3, color="crimson", label='DUNE ND (target)')
-        plt.plot(joined_masses_dump*1e6, joined_limits_dump*1e3, color="crimson", ls='dashed', label='DUNE ND (dump)')
+        #plt.plot(joined_masses_dump*1e6, joined_limits_dump*1e3, color="crimson", ls='dashed', label='DUNE ND (dump)')
 
 
         # Plot astrophysical limits
@@ -202,7 +222,7 @@ def main(flux_file, save_dir, show_plots):
 
         plt.tick_params(axis='x', which='minor')
 
-        #plt.show()
+        plt.show()
 
 
 if __name__ == "__main__":
