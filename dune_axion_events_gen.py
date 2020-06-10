@@ -34,9 +34,8 @@ sig_limit = 2.0  # poisson significance (2 sigma)
 def runGenerator(flux, ma, g):
     generator = PrimakoffAxionFromBeam(photon_rates=flux, axion_mass=ma, axion_coupling=g, target_mass=28e3,
                                 target_z=14, target_photon_cross=1e-24, detector_distance=304,
-                                detector_length=6, detector_area=50)
-    generator.simulate(20000)
-    print(len(generator.axion_angle))
+                                detector_length=10, detector_area=50)
+    generator.simulate(10)
     return generator
 
 
@@ -51,12 +50,13 @@ def main():
     gamma_theta = gamma_data[:,-1]
     gamma_wgt = scale*np.ones_like(gamma_e)
 
+
     # zip event-by-event flux array
     flux = np.array(list(zip(gamma_wgt,gamma_e,gamma_theta)))
 
     # make weighted histogram of flux
-    energy_edges = np.linspace(0, 10000, 120)
-    theta_edges = np.linspace(0, 1.5, 60)
+    energy_edges = np.linspace(0, 80000, 500)
+    theta_edges = np.linspace(0, 1.5, 20)
     hist_flux = np.histogram2d(gamma_e, gamma_theta, weights=gamma_wgt, bins=[energy_edges,theta_edges])
     hist_weights = hist_flux[0]
     energy_bins = (energy_edges[:-1] + energy_edges[1:]) / 2
@@ -68,51 +68,80 @@ def main():
                                     flattened_energies,
                                     flattened_thetas)))
     binned_flux = binned_flux[binned_flux[:,0]>0]
-    np.savetxt("data/dune/dune_binned_pythia8_gamma_pot_per_s.txt", binned_flux)
-    
-    
-    
-    
-    
+    np.savetxt("data/dune/dune_binned_pythia8_gamma_pot_per_s_2d.txt", binned_flux)
 
-    axion_gen = runGenerator(binned_flux, 1, 5e-8)
-    axion_gen_001 = runGenerator(binned_flux, 0.1, 5e-8)
-    axion_gen_100 = runGenerator(binned_flux, 10, 5e-8)
-    axion_gen_1000 = runGenerator(binned_flux, 500, 5e-10)
+    
+    def BestDecayCoupling(ma, eg, l):
+        hc = 6.58e-22 * 3e8
+        return np.sqrt(64 * np.pi * eg * hc / l / ma**4)
+    
+    
+    
+    # RUN THE GENERATORS
+    axion_gen = runGenerator(binned_flux, 1, BestDecayCoupling(1, 1000, 574))
+    axion_gen_001 = runGenerator(binned_flux, 0.1, BestDecayCoupling(0.1, 1000, 574))
+    axion_gen_100 = runGenerator(binned_flux, 10, BestDecayCoupling(10, 1000, 574))
+    axion_gen_1000 = runGenerator(binned_flux, 500, BestDecayCoupling(500, 2000, 574))
+
+    # DECLARE CONSTANTS
     axion_angles = axion_gen.axion_angle
-    deltatheta = axion_gen.gamma_sep_angle
     axion_energies = axion_gen.axion_energy
     axion_angles = [180*x/np.pi for x in axion_angles]
+
+    deltatheta = axion_gen.gamma_sep_angle
     deltatheta = [180*x/np.pi for x in deltatheta]
+    deltatheta_001 = axion_gen_001.gamma_sep_angle
+    deltatheta_001 = [180*x/np.pi for x in deltatheta_001]
+    deltatheta_100 = axion_gen_100.gamma_sep_angle
+    deltatheta_100 = [180*x/np.pi for x in deltatheta_100]
+    deltatheta_1000 = axion_gen_1000.gamma_sep_angle
+    deltatheta_1000 = [180*x/np.pi for x in deltatheta_1000]
     
-     # Plot photon energies from ALP scattering at detector
+    # Plot the photon angular separation
+    angle_edges = np.linspace(0, 45, 40)
+    plt.hist(deltatheta, density=True, bins=angle_edges, histtype="step", label=r"$m_a = 10$ MeV")
+    plt.hist(deltatheta_100, density=True, bins=angle_edges, histtype="step", label=r"$m_a = 1$ GeV")
+    plt.hist(deltatheta_1000, density=True, bins=angle_edges, histtype="step", label=r"$m_a = 10$ GeV")
+    plt.xlabel(r"$\Delta\theta_{\gamma\gamma}$ [deg]", fontsize=15)
+    plt.title(r"$a\to\gamma\gamma$", loc="right", fontsize=15)
+    plt.legend(loc='upper right', framealpha=1.0, fontsize=15)
+    plt.yscale('log')
+    plt.xlim((0,45))
+    plt.show()
+    plt.close()
+
+
+
+    # Plot photon energies from ALP scattering at detector
     density=True
-    alp_energy_edges = np.linspace(0,10000,20)
-    plt.hist(axion_gen.axion_energy, weights=axion_gen.decay_axion_weight, bins=alp_energy_edges,
+    alp_energy_edges = np.linspace(0,80,80)
+    plt.hist(np.array(axion_gen.axion_energy)/1000, weights=axion_gen.decay_axion_weight, bins=alp_energy_edges,
              histtype='step', label=r"$m_a = 1$ MeV", density=density)
-    plt.hist(axion_gen_100.axion_energy, weights=axion_gen_100.decay_axion_weight, bins=alp_energy_edges,
+    plt.hist(np.array(axion_gen_100.axion_energy)/1000, weights=axion_gen_100.decay_axion_weight, bins=alp_energy_edges,
              histtype='step', label=r"$m_a = 10$ MeV", density=density)
-    plt.hist(axion_gen_1000.axion_energy, weights=axion_gen_1000.decay_axion_weight, bins=alp_energy_edges,
+    plt.hist(np.array(axion_gen_1000.axion_energy)/1000, weights=axion_gen_1000.decay_axion_weight, bins=alp_energy_edges,
              histtype='step', label=r"$m_a = 0.5$ GeV", density=density)
     plt.title(r"$a \to \gamma \gamma$", loc="right")
-    plt.xlabel(r"$E_{\gamma\gamma}$ [MeV]", fontsize=15)
-    plt.ylabel("a.u.")
-    plt.ylim(bottom=0)
-    plt.legend()
+    plt.xlabel(r"$E_{\gamma_1} + E_{\gamma_2}$ [GeV]", fontsize=15)
+    plt.ylabel("a.u.", fontsize=15)
+    plt.yscale('log')
+    plt.ylim((1e-6, 10))
+    plt.xlim((0,50))
+    plt.legend(loc="upper right", framealpha=1.0, fontsize=15)
     plt.show()
     plt.clf()
-    
+
+    """    
     # pass scatter axions through det
     axion_gen.detect(det_mass * mev_per_kg / det_am, det_z, days*s_per_day, det_thresh)
     axion_gen_001.detect(det_mass * mev_per_kg / det_am, det_z, days*s_per_day, det_thresh)
     axion_gen_100.detect(det_mass * mev_per_kg / det_am, det_z, days*s_per_day, det_thresh)
     axion_gen_1000.detect(det_mass * mev_per_kg / det_am, det_z, days*s_per_day, det_thresh)
-    
-    
+    """
     
     # Plot axion energies at detector
     density=True
-    alp_energy_edges = np.linspace(0,15000,30)
+    alp_energy_edges = np.linspace(0,15000,25)
     plt.hist(axion_gen_001.axion_energy, weights=axion_gen_001.scatter_axion_weight, bins=alp_energy_edges,
              histtype='step', label=r"$m_a = 10$ keV", density=density)
     plt.hist(axion_gen.axion_energy, weights=axion_gen.scatter_axion_weight, bins=alp_energy_edges,
@@ -121,11 +150,11 @@ def main():
              histtype='step', label=r"$m_a = 10$ MeV", density=density)
     plt.title(r"$a Z \to \gamma Z$", loc="right")
     plt.xlabel(r"$E_\gamma$ [MeV]", fontsize=15)
-    plt.ylabel("a.u.")
+    plt.ylabel("a.u.", fontsize=15)
     plt.ylim(bottom=0)
-    plt.legend(loc="upper left")
+    plt.legend(loc="upper right", fontsize=15)
     plt.show()
-    plt.clf()
+    plt.close()
     
     
    
@@ -133,26 +162,18 @@ def main():
 
     # Plot the axion angular distribution
     angle_edges = np.linspace(0, 180, 100)
-    plt.hist(axion_angles, bins=angle_edges, density=True, histtype="step", label=r"$a$ in target")
+    plt.hist(axion_angles, bins=angle_edges, weights=axion_gen.scatter_axion_weight, density=True, histtype="step", label=r"$a$ in target")
     plt.hist(180*gamma_theta/np.pi, weights=gamma_wgt, bins=angle_edges, density=True, histtype="step", label=r"$\gamma$ in target (Pythia8)")
     plt.xlabel(r"$\theta_z$ [deg]", fontsize=15)
     plt.title(r"$m_a = 5$ MeV", loc="right", fontsize=15)
     plt.ylim(bottom=0)
     plt.legend()
     plt.show()
-    plt.clf()
+    plt.close()
 
 
 
-    # Plot the photon angular separation
-    angle_edges = np.linspace(0, 45, 20)
-    plt.hist(deltatheta, density=True, bins=angle_edges, histtype="step", label=r"$a\to\gamma\gamma$")
-    plt.xlabel(r"$\Delta\theta_{\gamma\gamma}$ [deg]", fontsize=15)
-    plt.title(r"$m_a = 5$ MeV", loc="right", fontsize=15)
-    plt.xlim(right=45)
-    plt.ylim(bottom=0)
-    plt.show()
-    plt.clf()
+    
     
     
     # show gamma distribution
@@ -165,9 +186,8 @@ def main():
     plt.xlabel(r"$E_\gamma$ [MeV]")
     plt.ylabel(r"$\theta$ [rad]")
     plt.title("pythia8 photons from POT (hard process)", loc="right")
-    plt.show()
-    
     plt.close()
+    
 
 
 if __name__ == "__main__":

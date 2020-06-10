@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from scipy.integrate import quad
 from scipy.optimize import fsolve, fmin_tnc
 
-from pyCEvNS.axion import PrimakoffAxionFromBeam
+from pyCEvNS.axion import PrimakoffAxionFromBeam, IsotropicAxionFromPrimakoff
 
 from matplotlib.pylab import rc
 import matplotlib.ticker as tickr
@@ -27,7 +27,7 @@ pot_per_year = 1.1e21
 det_mass = 50000
 det_am = 37.211e3  # mass of target atom in MeV
 det_z = 18  # atomic number
-days = 5*364  # days of exposure
+days = 10*364  # days of exposure
 det_area = 3*7  # cross-sectional det area
 det_thresh = 0.028e-3  # energy threshold
 sig_limit = 1.0  # poisson significance (2 sigma)
@@ -90,40 +90,41 @@ def GradientDescent(generator, mass_array, g_array, save_file):
     return limits_array
 
 
-def SandwichSearch(generator, mass_array, g_array, save_file):
+
+
+def SandwichSearch(generator, mass_array, g_array, save_file, weight=1.0):
+    print(mass_array)
     upper_array = np.zeros_like(mass_array)
     lower_array = np.ones_like(mass_array)
     print("starting scan...")
     for i in range(mass_array.shape[0]):
         generator.axion_mass = mass_array[i]
-        print("\n **** SETTING ALP MASS = %0.3f MeV **** \n" % mass_array[i])
+        print("\n **** SETTING ALP MASS = %0.6f MeV **** \n" % mass_array[i])
 
         
         # lower bound
         print(" *********** scanning lower bound...")
         for g in g_array:
-            print("TRYING g = ", g, " MeV^-1")
             generator.axion_coupling = g
             generator.simulate()
             ev = generator.decay_events(days*s_per_day, det_thresh)
             ev += generator.scatter_events(det_mass * mev_per_kg / det_am, det_z, days*s_per_day, det_thresh)
-            sig = sqrt(ev)
+            sig = sqrt(ev*weight)
             if sig > sig_limit:
-                print("FOUND DELTA CHI2 = %0.3f" % sig)
+                print("FOUND DELTA CHI2 = %0.6f at g=%0.9f MeV^-1" % (sig, g))
                 lower_array[i] = g
                 break
         
         # upper bound
         print(" ********** scanning upper bound...")
         for g in g_array[::-1]:
-            print("TRYING g = ", g, " MeV^-1")
             generator.axion_coupling = g
             generator.simulate()
             ev = generator.decay_events(days*s_per_day, det_thresh)
             ev += generator.scatter_events(det_mass * mev_per_kg / det_am, det_z, days*s_per_day, det_thresh)
-            sig = sqrt(ev)
+            sig = sqrt(ev*weight)
             if sig > sig_limit:
-                print("FOUND DELTA CHI2 = %0.3f" % sig)
+                print("FOUND DELTA CHI2 = %0.6f at g=%0.9f MeV^-1" % (sig, g))
                 upper_array[i] = g
                 break
 
@@ -137,16 +138,22 @@ def main(flux_file, save_dir, show_plots):
     # Declare event generators.
     flux = np.genfromtxt(flux_file)
     # 5% POT from beam dump
-    axion_gen = PrimakoffAxionFromBeam(photon_rates=flux, target_mass=28e3, target_z=14,
-                                              target_photon_cross=1e-24, detector_distance=304,
-                                              detector_length=14, detector_area=det_area)  # not sure about area and length
+    axion_gen = PrimakoffAxionFromBeam(photon_rates=flux, target_mass=12e3, target_z=6,
+                                       target_photon_cross=1e-24, detector_distance=574,
+                                       detector_length=10, detector_area=21)  # not sure about area and length
 
-    
+    target_generator = IsotropicAxionFromPrimakoff(photon_rates=flux, target_mass=12e3, target_z=6,
+                                                   target_photon_cross=1e-24, detector_distance=574,
+                                                   detector_length=14, detector_area=det_area)
+    dump_generator = IsotropicAxionFromPrimakoff(photon_rates=flux, target_mass=28e3, target_z=14,
+                                                   target_photon_cross=1e-24, detector_distance=304,
+                                                   detector_length=14, detector_area=det_area)
+ 
     
     # Run the scan.
     mass_array = np.logspace(-2, 4, 100)
-    g_array = np.logspace(-13, -3, 50)
-    save_file = save_dir + "dune_target_limits.txt"
+    g_array = np.logspace(-13, -3, 80)
+    save_file = save_dir
     rerun = True
     if rerun == True:
       print("Rerunning limits")
@@ -167,6 +174,7 @@ def main(flux_file, save_dir, show_plots):
     
         # TARGET
         # Find where the upper and lower arrays intersect at the tongue and clip
+
         diff_upper_lower = upper_limit_target - lower_limit_target
         upper_limit_target = np.delete(upper_limit_target, np.where(diff_upper_lower < 0))
         lower_limit_target = np.delete(lower_limit_target, np.where(diff_upper_lower < 0))
@@ -175,7 +183,13 @@ def main(flux_file, save_dir, show_plots):
         # join upper and lower bounds
         joined_limits_target = np.append(lower_limit_target, upper_limit_target[::-1])
         joined_masses_target = np.append(mass_array_target, mass_array_target[::-1])
-
+        
+        """
+        # original scan
+        original_limits = np.genfromtxt("limits/DUNE/isotropic_limits_original.txt", delimiter=',')
+        joined_limits_target = original_limits[:,1]
+        joined_masses_target = original_limits[:,0]
+        """
 
         # Read in data.
         beam = np.genfromtxt('data/existing_limits/beam.txt')
@@ -195,9 +209,10 @@ def main(flux_file, save_dir, show_plots):
 
 
         # Plot astrophysical limits
-        plt.fill(hbstars[:,0]*1e9, hbstars[:,1]*0.367e-3, label="HB Stars", color="mediumpurple")
-        plt.fill(cast[:,0]*1e9, cast[:,1]*0.367e-3, label="CAST", color="orchid")
-        plt.fill_between(sn1987a_lower[:,0]*1e9, y1=sn1987a_lower[:,1]*0.367e-3, y2=sn1987a_upper[:,1]*0.367e-3, label="SN1987a", color="lightsteelblue")
+        plt.fill(hbstars[:,0]*1e9, hbstars[:,1]*0.367e-3, label="HB Stars", color="mediumpurple", alpha=0.3)
+        plt.fill(cast[:,0]*1e9, cast[:,1]*0.367e-3, label="CAST", color="orchid", alpha=0.3)
+        plt.fill_between(sn1987a_lower[:,0]*1e9, y1=sn1987a_lower[:,1]*0.367e-3, y2=sn1987a_upper[:,1]*0.367e-3,
+                        label="SN1987a", color="lightsteelblue", alpha=0.3)
 
 
         # Plot lab limits
