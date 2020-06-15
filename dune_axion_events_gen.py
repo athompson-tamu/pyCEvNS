@@ -55,8 +55,8 @@ def main():
     flux = np.array(list(zip(gamma_wgt,gamma_e,gamma_theta)))
 
     # make weighted histogram of flux
-    energy_edges = np.linspace(0, 80000, 500)
-    theta_edges = np.linspace(0, 1.5, 20)
+    energy_edges = np.linspace(0, 80000, 300)
+    theta_edges = np.linspace(0, 1.5, 50)
     hist_flux = np.histogram2d(gamma_e, gamma_theta, weights=gamma_wgt, bins=[energy_edges,theta_edges])
     hist_weights = hist_flux[0]
     energy_bins = (energy_edges[:-1] + energy_edges[1:]) / 2
@@ -76,6 +76,17 @@ def main():
         return np.sqrt(64 * np.pi * eg * hc / l / ma**4)
     
     
+    # show gamma distribution
+    plt.hist(binned_flux[:,1]/1000, histtype='step', weights=binned_flux[:,0], bins=energy_bins/1000)
+    plt.yscale('log')
+    plt.title(r"Pythia8 $\gamma$ Spectrum", fontsize=15)
+    plt.ylabel("Counts / s")
+    plt.xlabel(r"$E_\gamma$ [GeV]")
+    #plt.xlim((0,80000))
+    #plt.ylim((0,1.5))
+    plt.show()
+
+
     
     # RUN THE GENERATORS
     axion_gen = runGenerator(binned_flux, 1, BestDecayCoupling(1, 1000, 574))

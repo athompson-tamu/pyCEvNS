@@ -93,7 +93,6 @@ def GradientDescent(generator, mass_array, g_array, save_file):
 
 
 def SandwichSearch(generator, mass_array, g_array, save_file, weight=1.0):
-    print(mass_array)
     upper_array = np.zeros_like(mass_array)
     lower_array = np.ones_like(mass_array)
     print("starting scan...")
@@ -134,30 +133,33 @@ def SandwichSearch(generator, mass_array, g_array, save_file, weight=1.0):
     return limits_array
 
 
-def main(flux_file, save_dir, show_plots):
+
+
+def main():
     # Declare event generators.
-    flux = np.genfromtxt(flux_file)
+    flux = np.genfromtxt("data/dune/dune_binned_pythia8_gamma_pot_per_s_2d.txt")
+    flux_5pc = np.genfromtxt("data/dune/dune_binned_pythia8_gamma_pot_per_s_2d.txt")
+    flux_5pc[:,0] *= 0.05
     # 5% POT from beam dump
     axion_gen = PrimakoffAxionFromBeam(photon_rates=flux, target_mass=12e3, target_z=6,
                                        target_photon_cross=1e-24, detector_distance=574,
-                                       detector_length=10, detector_area=21)  # not sure about area and length
+                                       detector_length=10, detector_area=21)
+    dump_gen = PrimakoffAxionFromBeam(photon_rates=flux_5pc, target_mass=26e3, target_z=14,
+                                       target_photon_cross=1e-24, detector_distance=304,
+                                       detector_length=10, detector_area=21)
 
-    target_generator = IsotropicAxionFromPrimakoff(photon_rates=flux, target_mass=12e3, target_z=6,
-                                                   target_photon_cross=1e-24, detector_distance=574,
-                                                   detector_length=14, detector_area=det_area)
-    dump_generator = IsotropicAxionFromPrimakoff(photon_rates=flux, target_mass=28e3, target_z=14,
-                                                   target_photon_cross=1e-24, detector_distance=304,
-                                                   detector_length=14, detector_area=det_area)
+
  
     
     # Run the scan.
+    save_dir = "limits/DUNE/dune_dump_limits_20200614.txt"
     mass_array = np.logspace(-2, 4, 100)
     g_array = np.logspace(-13, -3, 80)
     save_file = save_dir
     rerun = True
     if rerun == True:
       print("Rerunning limits")
-      limits_target = SandwichSearch(axion_gen, mass_array, g_array, save_file)
+      limits_target = SandwichSearch(dump_gen, mass_array, g_array, save_file)
     else:
       limits_target = np.genfromtxt(save_file)
 
@@ -167,79 +169,78 @@ def main(flux_file, save_dir, show_plots):
     lower_limit_target = limits_target[1]
     
     
-    print(show_plots)
     
     # Plotting.
-    if show_plots:
+    # TARGET
+    # Find where the upper and lower arrays intersect at the tongue and clip
+
+    diff_upper_lower = upper_limit_target - lower_limit_target
+    upper_limit_target = np.delete(upper_limit_target, np.where(diff_upper_lower < 0))
+    lower_limit_target = np.delete(lower_limit_target, np.where(diff_upper_lower < 0))
+    mass_array_target = np.delete(mass_array, np.where(diff_upper_lower < 0))
     
-        # TARGET
-        # Find where the upper and lower arrays intersect at the tongue and clip
+    # join upper and lower bounds
+    joined_limits_target = np.append(lower_limit_target, upper_limit_target[::-1])
+    joined_masses_target = np.append(mass_array_target, mass_array_target[::-1])
+    
+    """
+    # original scan
+    original_limits = np.genfromtxt("limits/DUNE/isotropic_limits_original.txt", delimiter=',')
+    joined_limits_target = original_limits[:,1]
+    joined_masses_target = original_limits[:,0]
+    """
 
-        diff_upper_lower = upper_limit_target - lower_limit_target
-        upper_limit_target = np.delete(upper_limit_target, np.where(diff_upper_lower < 0))
-        lower_limit_target = np.delete(lower_limit_target, np.where(diff_upper_lower < 0))
-        mass_array_target = np.delete(mass_array, np.where(diff_upper_lower < 0))
-        
-        # join upper and lower bounds
-        joined_limits_target = np.append(lower_limit_target, upper_limit_target[::-1])
-        joined_masses_target = np.append(mass_array_target, mass_array_target[::-1])
-        
-        """
-        # original scan
-        original_limits = np.genfromtxt("limits/DUNE/isotropic_limits_original.txt", delimiter=',')
-        joined_limits_target = original_limits[:,1]
-        joined_masses_target = original_limits[:,0]
-        """
+    
 
-        # Read in data.
-        beam = np.genfromtxt('data/existing_limits/beam.txt')
-        eeinva = np.genfromtxt('data/existing_limits/eeinva.txt')
-        lep = np.genfromtxt('data/existing_limits/lep.txt')
-        lsw = np.genfromtxt('data/existing_limits/lsw.txt')
-        nomad = np.genfromtxt('data/existing_limits/nomad.txt')
+    # Read in data.
+    beam = np.genfromtxt('data/existing_limits/beam.txt')
+    eeinva = np.genfromtxt('data/existing_limits/eeinva.txt')
+    lep = np.genfromtxt('data/existing_limits/lep.txt')
+    lsw = np.genfromtxt('data/existing_limits/lsw.txt')
+    nomad = np.genfromtxt('data/existing_limits/nomad.txt')
 
-        # Astrophyiscal limits
-        cast = np.genfromtxt("data/existing_limits/cast.txt", delimiter=",")
-        hbstars = np.genfromtxt("data/existing_limits/hbstars.txt", delimiter=",")
-        sn1987a_upper = np.genfromtxt("data/existing_limits/sn1987a_upper.txt", delimiter=",")
-        sn1987a_lower = np.genfromtxt("data/existing_limits/sn1987a_lower.txt", delimiter=",")
+    # Astrophyiscal limits
+    cast = np.genfromtxt("data/existing_limits/cast.txt", delimiter=",")
+    hbstars = np.genfromtxt("data/existing_limits/hbstars.txt", delimiter=",")
+    sn1987a_upper = np.genfromtxt("data/existing_limits/sn1987a_upper.txt", delimiter=",")
+    sn1987a_lower = np.genfromtxt("data/existing_limits/sn1987a_lower.txt", delimiter=",")
 
-        plt.plot(joined_masses_target*1e6, joined_limits_target*1e3, color="crimson", label='DUNE ND (target)')
-        #plt.plot(joined_masses_dump*1e6, joined_limits_dump*1e3, color="crimson", ls='dashed', label='DUNE ND (dump)')
+    plt.plot(joined_masses_target*1e6, joined_limits_target*1e3, color="crimson", label='DUNE ND (target)')
+    #plt.plot(joined_masses_dump*1e6, joined_limits_dump*1e3, color="crimson", ls='dashed', label='DUNE ND (dump)')
 
 
-        # Plot astrophysical limits
-        plt.fill(hbstars[:,0]*1e9, hbstars[:,1]*0.367e-3, label="HB Stars", color="mediumpurple", alpha=0.3)
-        plt.fill(cast[:,0]*1e9, cast[:,1]*0.367e-3, label="CAST", color="orchid", alpha=0.3)
-        plt.fill_between(sn1987a_lower[:,0]*1e9, y1=sn1987a_lower[:,1]*0.367e-3, y2=sn1987a_upper[:,1]*0.367e-3,
-                        label="SN1987a", color="lightsteelblue", alpha=0.3)
+    # Plot astrophysical limits
+    plt.fill(hbstars[:,0]*1e9, hbstars[:,1]*0.367e-3, label="HB Stars", color="mediumpurple", alpha=0.3)
+    plt.fill(cast[:,0]*1e9, cast[:,1]*0.367e-3, label="CAST", color="orchid", alpha=0.3)
+    plt.fill_between(sn1987a_lower[:,0]*1e9, y1=sn1987a_lower[:,1]*0.367e-3, y2=sn1987a_upper[:,1]*0.367e-3,
+                    label="SN1987a", color="lightsteelblue", alpha=0.3)
 
 
-        # Plot lab limits
-        plt.fill(beam[:,0], beam[:,1], label='Beam Dump', color="b", alpha=0.7)
-        plt.fill(np.hstack((eeinva[:,0], np.min(eeinva[:,0]))), np.hstack((eeinva[:,1], np.max(eeinva[:,1]))),
-                color="orange", label=r'$e^+e^-\rightarrow inv.+\gamma$', alpha=0.7)
-        plt.fill(lep[:,0], lep[:,1], label='LEP', color="green", alpha=0.7)
-        plt.fill(np.hstack((nomad[:,0], np.min(nomad[:,0]))), np.hstack((nomad[:,1], np.max(nomad[:,1]))),
-                color="yellow", label='NOMAD', alpha=0.7)
+    # Plot lab limits
+    plt.fill(beam[:,0], beam[:,1], label='Beam Dump', color="b", alpha=0.7)
+    plt.fill(np.hstack((eeinva[:,0], np.min(eeinva[:,0]))), np.hstack((eeinva[:,1], np.max(eeinva[:,1]))),
+            color="orange", label=r'$e^+e^-\rightarrow inv.+\gamma$', alpha=0.7)
+    plt.fill(lep[:,0], lep[:,1], label='LEP', color="green", alpha=0.7)
+    plt.fill(np.hstack((nomad[:,0], np.min(nomad[:,0]))), np.hstack((nomad[:,1], np.max(nomad[:,1]))),
+            color="yellow", label='NOMAD', alpha=0.7)
 
 
-        plt.legend(loc="lower left", framealpha=1, ncol=2, fontsize=9)
-        plt.title(r"Primakoff Scattering and $a\to\gamma\gamma$, 50t fiducial mass, 1000 days exposure", loc="right")
-        plt.xscale('log')
-        plt.yscale('log')
-        plt.xlim((1,1e10))
-        plt.ylim(1e-13,1e-1)
-        plt.xticks(fontsize=13)
-        plt.yticks(fontsize=13)
-        plt.xlabel('$m_a$ [eV]', fontsize=15)
-        plt.ylabel('$g_{a\gamma\gamma}$ [GeV$^{-1}$]', fontsize=15)
+    plt.legend(loc="lower left", framealpha=1, ncol=2, fontsize=9)
+    plt.title(r"Primakoff Scattering and $a\to\gamma\gamma$, 50t fiducial mass, 1000 days exposure", loc="right")
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.xlim((1,1e10))
+    plt.ylim(1e-13,1e-1)
+    plt.xticks(fontsize=13)
+    plt.yticks(fontsize=13)
+    plt.xlabel('$m_a$ [eV]', fontsize=15)
+    plt.ylabel('$g_{a\gamma\gamma}$ [GeV$^{-1}$]', fontsize=15)
 
-        plt.tick_params(axis='x', which='minor')
+    plt.tick_params(axis='x', which='minor')
 
-        plt.show()
+    plt.show()
 
 
 if __name__ == "__main__":
-    main(flux_file=str(sys.argv[1]), save_dir=str(sys.argv[2]), show_plots=sys.argv[3])
+    main()
 
