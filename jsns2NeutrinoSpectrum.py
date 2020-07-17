@@ -70,13 +70,13 @@ def get_energy_bins(e_a, e_b):
 
 
 # Set up energy and timing bins
-hi_energy_cut = 300  # mev
+hi_energy_cut = 100  # mev
 lo_energy_cut = 0.0  # mev
-hi_timing_cut = 0.25
-lo_timing_cut = 0.1
-energy_edges = np.linspace(lo_energy_cut, hi_energy_cut,48) #get_energy_bins(lo_energy_cut, hi_energy_cut)
+hi_timing_cut = 2.0
+lo_timing_cut = 0.0
+energy_edges = np.linspace(lo_energy_cut, hi_energy_cut,40) #get_energy_bins(lo_energy_cut, hi_energy_cut)
 energy_bins = (energy_edges[:-1] + energy_edges[1:]) / 2
-timing_edges = np.linspace(lo_timing_cut, hi_timing_cut, 48)
+timing_edges = np.linspace(lo_timing_cut, hi_timing_cut, 40)
 timing_bins = (timing_edges[:-1] + timing_edges[1:]) / 2
 
 n_meas = np.zeros((energy_bins.shape[0] * len(timing_bins), 2))
@@ -163,8 +163,46 @@ def GetDMEvents(m_chi, m_dp, m_med, g, lifetime=0.001):
 
     return brem_events + pim_events + pi0_events
 
-dm_events1 = GetDMEvents(m_chi=1, m_dp=3, m_med=3, g=3.16*5e-5/45)
-dm_events2 = GetDMEvents(m_chi=25, m_dp=75, m_med=75, g=0.5e-4)
+
+
+# Plot 2d spectrum
+#plt.hist2d(flat_energies, flat_times, weights=n_nu, bins=[energy_edges, timing_edges])
+from mpl_toolkits.mplot3d import Axes3D
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+_zpos = np.zeros(len(n_nu))
+dx = energy_edges[1]-energy_edges[0]
+dy = timing_edges[1]-timing_edges[0]
+ax.bar3d(flat_energies, flat_times, np.zeros(len(n_nu)), dx,
+         dy, n_nu, color='#00ceaa', edgecolor='black', alpha=0.5)
+#ax.bar3d(flat_energies, flat_times, _zpos, dx, dy, n_prompt, color='b', alpha=0.2)
+#ax.bar3d(flat_energies, flat_times, _zpos+n_prompt, dx, dy, n_delayed, color='r', alpha=0.2)
+ax.set_xlabel(r"$E_r$ [keV]", fontsize=13)
+ax.set_ylabel(r"$t$ [$\mu$s]", fontsize=13)
+ax.set_zlabel("Counts", fontsize=13)
+ax.set_title(r"JSNS$^2$ Neutrino Spectra", loc="right", fontsize=13)
+plt.show()
+plt.close()
+
+
+dm_events1 = GetDMEvents(m_chi=5, m_dp=75, m_med=15, g=2.8*5.16*5e-5/45)
+dm_events2 = GetDMEvents(m_chi=25, m_dp=75, m_med=75, g=0.7e-4)
+
+
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+_zpos = np.zeros(len(dm_events1))
+dx = energy_edges[1]-energy_edges[0]
+dy = timing_edges[1]-timing_edges[0]
+ax.bar3d(flat_energies, flat_times, np.zeros(len(n_nu)), dx,
+         dy, dm_events1, color='#00ceaa', edgecolor='black', alpha=0.5)
+ax.set_xlabel(r"$E_r$ [keV]", fontsize=13)
+ax.set_ylabel(r"$t$ [$\mu$s]", fontsize=13)
+ax.set_zlabel("Counts", fontsize=13)
+ax.set_title(r"JSNS$^2$ $\chi e^- \to \chi e^-$ Spectra ($\tau < 0.001$ $\mu$s)", loc="right", fontsize=13)
+plt.show()
+plt.close()
+
 
 
 
@@ -173,26 +211,27 @@ dm_events2 = GetDMEvents(m_chi=25, m_dp=75, m_med=75, g=0.5e-4)
 # Plot Dark Matter against Neutrino Spectrum
 density = False
 plt.hist([flat_energies,flat_energies], weights=[n_prompt, n_delayed], bins=energy_edges,
-         stacked=True, histtype='stepfilled', density=density, color=['teal','tan'], label=["Prompt", "Delayed"])
+         stacked=True, histtype='stepfilled', density=density, color=['teal','tan'], label=[r"Prompt $\nu$", r"Delayed $\nu$"])
 plt.hist(flat_energies,weights=dm_events1,bins=energy_edges, color='blue',
-         histtype='step', density=density, label=r"DM ($m_\chi = 1$ MeV, $m_V = 3$ MeV)")
+         histtype='step', density=density, label=r"DM ($m_\chi = 5$ MeV, $m_V = 15$ MeV)")
 plt.hist(flat_energies,weights=dm_events2,bins=energy_edges, color='crimson',
          histtype='step', density=density, label=r"DM ($m_\chi = 25$ MeV, $m_V = 75$ MeV)")
-plt.vlines(30, 0, 1e10, ls='dashed')
-plt.arrow(30, 3e3, 6, 0, head_width=250, head_length=4, color='k')
+plt.vlines(energy_edges[5], 0, 1e10, ls='dashed')
+plt.arrow(energy_edges[5], 3e3, 6, 0, head_width=250, head_length=4, color='k')
 
-plt.xlabel(r"$E_r$ [MeVee]", fontsize=15)
+plt.xlabel(r"$E_r$ [MeV]", fontsize=20)
 plt.yscale("log")
-plt.ylabel(r"Events", fontsize=15)
-plt.title(r"JSNS$^2$, $0.1 < t < 0.25$ $\mu$s", loc='right', fontsize=15)
+plt.ylabel(r"Events", fontsize=20)
+plt.title(r"JSNS$^2$, $t < 0.25$ $\mu$s", loc='right', fontsize=15)
 plt.xlim((lo_energy_cut,hi_energy_cut))
-plt.ylim((1e-1, 1e4))
-plt.xticks(fontsize=13)
-plt.yticks(fontsize=13)
-plt.legend(fontsize=12, loc="upper right", framealpha=1.0)
+plt.ylim((5e-1, 1e4))
+plt.xticks(fontsize=15)
+plt.yticks(fontsize=15)
+plt.legend(fontsize=15, loc="upper right", framealpha=1.0)
 plt.tight_layout()
 plt.show()
 plt.clf()
+"""
 
 
 dm_events1 = GetDMEvents(m_chi=25, m_dp=75, m_med=25, g=1e-4, lifetime=0.001)
@@ -201,23 +240,26 @@ dm_events3 = GetDMEvents(m_chi=5, m_dp=138, m_med=25, g=2e-4, lifetime=1)
 
 density = True
 plt.hist([flat_times,flat_times], weights=[n_prompt, n_delayed], bins=timing_edges,
-         stacked=True, histtype='stepfilled', density=density, color=['teal','tan'], label=["Prompt", "Delayed"])
+         stacked=True, histtype='stepfilled', density=density, color=['teal','tan'], label=[r"Prompt $\nu$", r"Delayed $\nu$"])
 plt.hist(flat_times,weights=dm_events1,bins=timing_edges, color='blue',
          histtype='step', density=density, label=r"DM ($M_X = 75$ MeV, $\tau < 0.001$ $\mu$s)")
 plt.hist(flat_times,weights=dm_events2,bins=timing_edges, color='crimson',
          histtype='step', density=density, label=r"DM ($M_X = 75$ MeV, $\tau = 1$ $\mu$s)")
 plt.hist(flat_times,weights=dm_events3,bins=timing_edges, color='darkorange',
          histtype='step', density=density, label=r"DM ($M_X = 138$ MeV, $\tau = 1$ $\mu$s)")
-plt.xlabel(r"$t$ [$\mu$s]", fontsize=15)
-plt.ylabel(r"a.u.", fontsize=15)
+plt.xlabel(r"$t$ [$\mu$s]", fontsize=20)
+plt.ylabel(r"a.u.", fontsize=20)
 plt.title(r"JSNS$^2$", loc="right", fontsize=15)
 plt.xlim((0,2))
 plt.ylim((0,5))
-plt.legend(fontsize=12)
-plt.xticks(fontsize=13)
-plt.yticks(fontsize=13)
+plt.legend(fontsize=13)
+plt.xticks(fontsize=15)
+plt.yticks(fontsize=15)
 plt.tight_layout()
 plt.show()
+"""
+
+
 
 
 

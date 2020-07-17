@@ -196,10 +196,10 @@ def BinarySearch(flux, detector, mass_grid, save_file, sig_limit):
     #generator.detector_distance = det_dis
     #generator.min_decay_length = 0.9*det_dis
     #generator.photon_rates = flux
-    axion_gen = IsotropicAxionFromPrimakoff(photon_rates=mw_flux, axion_mass=1, axion_coupling=1e-6, target_mass=240e3,
-                                            target_z=90, target_photon_cross=15e-24, detector_distance=det_dis,
-                                            detector_length=np.sqrt(det_area))
-    #axion_gen = MinerEstimate(flux, 1, 1e-6, 240e3, 90, 15e-24, det_dis, 0.9*det_dis)
+    #axion_gen = IsotropicAxionFromPrimakoff(photon_rates=mw_flux, axion_mass=1, axion_coupling=1e-6, target_mass=240e3,
+     #                                       target_z=90, target_photon_cross=15e-24, detector_distance=det_dis,
+      #                                      detector_length=np.sqrt(det_area))
+    axion_gen = MinerEstimate(flux, 1, 1e-6, 240e3, 90, 15e-24, det_dis, 0.9*det_dis)
 
     # Begin the scan
     for i in range(mass_grid.shape[0]):
@@ -239,6 +239,7 @@ def BinarySearch(flux, detector, mass_grid, save_file, sig_limit):
         print(10**mid)
 
     save_array = np.array([mass_grid, lower_array, upper_array])
+    save_array = np.transpose(save_array)
     np.savetxt(save_file, save_array)
     return save_array
 

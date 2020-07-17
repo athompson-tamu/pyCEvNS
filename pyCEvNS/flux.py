@@ -558,7 +558,6 @@ class NeutrinoFlux:
                 energies = [self.delta_nu[flavor][i][0] for i in range(len(self.delta_nu[flavor]))]
                 if self.ev_max is None or max(energies) > self.ev_max:
                     self.ev_max = max(energies)
-            print(self.ev_max)
                     
         else:
             raise Exception("'delta_fluxes' must be a dictionary of a list of tuples! e.g. {'e': [(12, 4), (14, 15)], ...}")
@@ -834,7 +833,7 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
             if self.verbose:
                 print("getting photons from E =", photon_events[0], "Size =", photon_events[1])
             self._generate_single(photon_events, self.sampling_size)
-        
+        self.weight = [x * self.norm for x in self.weight]
         self.timing = np.array(self.time) * 1e6
         hist, bin_edges = np.histogram(self.energy, bins=self.nbins, weights=self.weight, density=True)
         super().__init__((bin_edges[:-1] + bin_edges[1:]) / 2, hist, norm=np.sum(self.weight))
@@ -855,7 +854,7 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
         dm_p = np.sqrt(dm_e ** 2 - dm_m ** 2)
 
         # Directional sampling.
-        dp_wgt = self.norm * photon_events[1] / nsamples  # Event weight
+        dp_wgt = photon_events[1] / nsamples  # Event weight
         # Brem suppression
         if self.supp == True:
             el_e = 1.0773*dp_e + 13.716  # most likely electron energy that produced this dark photon
@@ -874,7 +873,6 @@ class DMFluxIsoPhoton(FluxBaseContinuous):
                                               -dp_momentum[3] / dp_momentum[0]]))
         pos_z = c_light * t_dp * dp_momentum[3] / dp_momentum[0]  # position is along z by construction
         for i in range(nsamples):
-            #print(pos[i])
             dm_momentum = np.array([dm_e, dm_p * np.sqrt(1 - csd[i] ** 2) * np.cos(phid[i]),
                                     dm_p * np.sqrt(1 - csd[i] ** 2) * np.sin(phid[i]), dm_p * csd[i]])
             dm_momentum = boost_matr @ dm_momentum
@@ -1137,7 +1135,7 @@ class DMFluxFromPi0Decay(FluxBaseContinuous):
     """
     z direction is the direction of the beam
     """
-    def __init__(self, pi0_distribution, dark_photon_mass, coupling_quark, dark_matter_mass, life_time=None,
+    def __init__(self, pi0_distribution, dark_photon_mass, coupling_quark, dark_matter_mass, meson_mass=massofpi0, life_time=None,
                  detector_distance=19.3, detector_direction=0, detector_width=0.1, pot_rate=5e20, pot_mu=0.7,
                  pot_sigma=0.15, pion_rate=52935/500000, nbins=20):
         self.pi0_distribution = pi0_distribution
@@ -1147,6 +1145,7 @@ class DMFluxFromPi0Decay(FluxBaseContinuous):
             self.life_time = life_time * 1e-6
         self.epsilon = coupling_quark
         self.dm_m = dark_matter_mass
+        self.meson_mass = meson_mass
         self.det_dist = detector_distance
         self.det_direc = detector_direction
         self.det_width = detector_width
@@ -1183,21 +1182,21 @@ class DMFluxFromPi0Decay(FluxBaseContinuous):
         super().__init__((bin_edges[:-1]+bin_edges[1:])/2, hist, norm=norm)
 
     def _generate_single(self, pi0_events):
-        if self.dp_m > massofpi0:
+        if self.dp_m > self.meson_mass:
             return
         pos = np.zeros(3)
         t = 0
         t += np.random.normal(self.pot_mu * 1e-6, self.pot_sigma * 1e-6)
-        pi_e = massofpi0 + pi0_events[2]
-        pi_p = np.sqrt(pi_e**2 - massofpi0**2)
+        pi_e = self.meson_mass + pi0_events[2]
+        pi_p = np.sqrt(pi_e**2 - self.meson_mass**2)
         pi_v = pi_p / pi_e
-        t_pi = np.random.exponential(8.4e-17*pi_e/massofpi0)
+        t_pi = np.random.exponential(8.4e-17*pi_e/self.meson_mass)
         pos += pi_v * polar_to_cartesian(pi0_events[:2]) * t_pi * c_light
         t += t_pi
         # pi0 to dark photon
         dp_m = self.dp_m
-        dp_e = (massofpi0**2 + dp_m**2)/(2*massofpi0)
-        dp_p = (massofpi0**2 - dp_m**2)/(2*massofpi0)
+        dp_e = (self.meson_mass**2 + dp_m**2)/(2*self.meson_mass)
+        dp_p = (self.meson_mass**2 - dp_m**2)/(2*self.meson_mass)
         cs = np.random.uniform(-1, 1)
         phi = np.random.uniform(0, 2*np.pi)
         dp_momentum = np.array([dp_e, dp_p*np.sqrt(1-cs**2)*np.cos(phi), dp_p*np.sqrt(1-cs**2)*np.sin(phi), dp_p*cs])

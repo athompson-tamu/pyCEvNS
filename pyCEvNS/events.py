@@ -398,8 +398,6 @@ class DmEventsGen:
         """
         energy_bins = (energy_edges[:-1] + energy_edges[1:]) / 2
         timing_bins = (timing_edges[:-1] + timing_edges[1:]) / 2
-        time_bin_width = timing_edges[1] - timing_edges[0]
-
         n_meas = np.zeros((energy_bins.shape[0] * len(timing_bins), 2))
         n_dm = np.zeros(n_meas.shape[0])
 
@@ -643,7 +641,6 @@ class NeutrinoElectronElasticVector:
         fint = flux.integrate(emin, flux.ev_max, flavor)
         fintinv = flux.integrate(emin, flux.ev_max, flavor, weight_function=_inv)
         fintinvs = flux.integrate(emin, flux.ev_max, flavor, weight_function=_invs)
-        #print(emin, fint)
         if flavor[-1] == 'r':
             tmp = epls
             epls = eprs

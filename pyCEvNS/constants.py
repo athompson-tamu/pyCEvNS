@@ -23,6 +23,7 @@ mmu = 105.658369
 mtau = 1.77699e3
 massofpi = 139.57
 massofpi0 = 134.98
+massofeta = 547.862
 massofp = 938.27
 massofn = 939.56
 axial_mass = 1014

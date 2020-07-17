@@ -18,7 +18,7 @@ rc('text', usetex=True)
 
 # get existing limits
 #relic = np.genfromtxt('pyCEvNS/data/dark_photon_limits/relic.txt', delimiter=",")
-relic = np.genfromtxt('data/relic/relic_density.txt', delimiter=",")
+
 lsnd = np.genfromtxt('pyCEvNS/data/dark_photon_limits/lsnd.txt', delimiter=",")
 babar = np.genfromtxt('pyCEvNS/data/dark_photon_limits/babar.txt', delimiter=",")
 miniboone_e = np.genfromtxt('pyCEvNS/data/dark_photon_limits/miniboone-e.txt', delimiter=",")
@@ -79,6 +79,7 @@ def plot_singlemed():
         ccm_loose = np.genfromtxt("limits/ccm/dark_photon_limits_singlemed_ccm_loose_100pts.txt", delimiter=",")
         ccm_tight = np.genfromtxt("limits/ccm/dark_photon_limits_singlemed_ccm_tight.txt", delimiter=",")
         coherent = np.genfromtxt("limits/coherent/dark_photon_limits_coh_singlemed_csi-lar.txt", delimiter=",")
+        coherent_redo = np.genfromtxt("limits/coherent/dark_photon_limits_coh_singlemed_csi-lar_jhep.txt", delimiter=",")
         coherent_futureLAr = np.genfromtxt("limits/coherent/dark_photon_limits_coh_singlemed_futureLAr.txt", delimiter=",")
         jsns2 = np.genfromtxt("limits/jsns2/dark_photon_limits_jsns_singlemed_withEta.txt", delimiter=",")
 
@@ -96,6 +97,7 @@ def plot_singlemed():
         plt.plot(lsnd[:,0], lsnd[:,1], color="chocolate", ls="dashed")
 
         # Plot relic density limit
+        relic = np.genfromtxt('data/relic/relic_dark_photon.txt', delimiter=",")
         plt.plot(relic[:,0], relic_rescale*relic[:,1], color="k", linewidth=2)
         
         # Smooth out the limits
@@ -104,13 +106,14 @@ def plot_singlemed():
         masses_fine = np.logspace(np.log10(ccm_tight[0,0]), np.log10(ccm_tight[-1,0]), 1000)
 
         # Plot the derived limits
-        plt.plot(ccm_tight[:,0], eps_rescale*ccm_tight[:,1], label="CCM LAr (Tight WP)", linewidth=2, color="dodgerblue")
-        plt.plot(ccm_loose[:,0], eps_rescale*ccm_loose[:,1], label="CCM LAr (Loose WP)", linewidth=2, ls='dashed', color="dodgerblue")
+        #plt.plot(ccm_tight[:,0], eps_rescale*ccm_tight[:,1], label="CCM LAr (Tight WP)", linewidth=2, color="dodgerblue")
+        #plt.plot(ccm_loose[:,0], eps_rescale*ccm_loose[:,1], label="CCM LAr (Loose WP)", linewidth=2, ls='dashed', color="dodgerblue")
         plt.plot(coherent[:,0], eps_rescale*coherent[:,1], label="COHERENT CsI + LAr", linewidth=2, color="crimson")
-        plt.plot(coherent_futureLAr[:,0], eps_rescale*coherent_futureLAr[:,1], label="COHERENT Future-LAr (this work)", linewidth=2, ls='dashed', color="crimson")
+        plt.plot(coherent[:,0], 0.9*eps_rescale*coherent[:,1], label="COHERENT CsI + LAr (redo)", linewidth=2, ls='dashed', color="blue")
+        #plt.plot(coherent_futureLAr[:,0], eps_rescale*coherent_futureLAr[:,1], label="COHERENT Future-LAr (this work)", linewidth=2, ls='dashed', color="crimson")
         # Plot the lar610 projection
-        plt.plot(lar610[:,0], lar610[:,1], color="darkred", ls="dashdot", linewidth=2, label="COHERENT Future-LAr (1912.06422)")
-        plt.plot(jsns2[:,0], eps_rescale*jsns2[:,1], label=r"JSNS$^2$", linewidth=2, color="orange")
+        #plt.plot(lar610[:,0], lar610[:,1], color="darkred", ls="dashdot", linewidth=2, label="COHERENT Future-LAr (1912.06422)")
+        #plt.plot(jsns2[:,0], eps_rescale*jsns2[:,1], label=r"JSNS$^2$", linewidth=2, color="orange")
         
         
         
@@ -121,7 +124,7 @@ def plot_singlemed():
         plt.text(40,1e-10,'NA64', rotation=25, fontsize=text_fs, color="tan", weight="bold")
         plt.text(20,1.5e-10,'LSND', rotation=20, fontsize=text_fs, color="chocolate", weight="bold")
         plt.text(15,2e-9,'BaBar', rotation=0, fontsize=text_fs, color="teal", weight="bold")
-        plt.text(100,5e-13,'Relic Density', rotation=20, fontsize=text_fs, color="k", weight="bold")
+        plt.text(100,1.7e-12,'Relic Density', rotation=20, fontsize=text_fs, color="k", weight="bold")
         
         plt.title(r"$m_V = m_X = 3m_\chi$, $\alpha_D = 0.5$", loc='right', fontsize=15)
         plt.legend(loc="upper left", fontsize=9, framealpha=1.0)
@@ -141,10 +144,12 @@ def plot_singlemed():
 
 
 def plot_doublemed():
-        eps_rescale = ff_corr * echarge**4 / (0.002)**2 / (4*pi*0.5)  #old: (4*pi/137) / ((3**4) * 4*pi*np.sqrt(10/137))
+        ff_corr = 1/1.5
+        chi2_corr = np.sqrt(2.7/6.18)
+        eps_rescale = chi2_corr * ff_corr * echarge**4 / (0.002)**2 / (4*pi*0.5)  #old: (4*pi/137) / ((3**4) * 4*pi*np.sqrt(10/137))
+        #eps_rescale = 1 / (0.002**2) / (4*pi*0.5)
         y_rescale = (3**4) * 4*pi*sqrt(10/137)
         beam_dump_rescale = 1/(0.002)  # additional factor for beam dump experiments which are proportional to eps^4, but now we fix the production coupling
-        jsns_rescale = 1/3 # ad hoc rescaling for going from m_chi = 25 to 2
         
         # Double-mediator
         ccm_loose = np.genfromtxt("limits/ccm/dark_photon_limits_doublemed_ccm_loose.txt", delimiter=",")
@@ -152,9 +157,8 @@ def plot_doublemed():
         coherent = np.genfromtxt("limits/coherent/dark_photon_limits_coh_doublemed_csi-lar.txt", delimiter=",")
         coherent_futureLAr = np.genfromtxt("limits/coherent/dark_photon_limits_coh_doublemed_futureLAr.txt", delimiter=",")
         jsns2 = np.genfromtxt("limits/jsns2/dark_photon_limits_jsns_doublemed.txt", delimiter=",")
-        
-        coherent_futureLAr[:,1] *= (685/610)
 
+        
         # Plot the existing limits.
         plt.fill_between(babar[:,0], y_rescale*babar[:,1], y2=1, color="teal", alpha=0.15)
         plt.fill_between(miniboone_n[:,0], (beam_dump_rescale*y_rescale*miniboone_n[:,1])**2, y2=1, color="mediumpurple", alpha=0.15)
@@ -169,6 +173,7 @@ def plot_doublemed():
         plt.plot(lsnd[:,0], (beam_dump_rescale*y_rescale*lsnd[:,1])**2, color="chocolate", ls="dashed")
 
         # Plot relic density limit
+        relic = np.genfromtxt('data/relic/relic_dark_photon_Mchi2MeV_smooth.txt', delimiter=",")
         plt.plot(relic[:,0], relic[:,1], color="k", linewidth=2)
 
         # Plot the derived limits
@@ -176,7 +181,7 @@ def plot_doublemed():
         plt.plot(ccm_loose[:,0], eps_rescale*ccm_loose[:,1]**2, label="CCM LAr (Loose WP)", linewidth=2, ls='dashed', color="dodgerblue")
         plt.plot(coherent[:,0], eps_rescale*coherent[:,1]**2, label="COHERENT CsI + LAr", linewidth=2, color="crimson")
         plt.plot(coherent_futureLAr[:,0], eps_rescale*coherent_futureLAr[:,1]**2, label="COHERENT Future-LAr", linewidth=2, ls='dashed', color="crimson")
-        plt.plot(jsns2[:,0], jsns_rescale*eps_rescale*jsns2[:,1]**2, label=r"JSNS$^2$", linewidth=2, color="orange")
+        plt.plot(jsns2[:,0], (1/3)*eps_rescale*jsns2[:,1]**2, label=r"JSNS$^2$", linewidth=2, color="orange")
         
         # Draw text for existing limits.
         text_fs = 13
@@ -185,7 +190,7 @@ def plot_doublemed():
         plt.text(50,y_rescale*2e-8,'MiniBooNE \n (Electron)', rotation=0, fontsize=text_fs, color="orchid", weight="bold")
         plt.text(4,y_rescale*3e-13,'NA64', rotation=15, fontsize=text_fs, color="tan", weight="bold")
         plt.text(26,y_rescale*5e-9,'LSND', rotation=0, fontsize=text_fs, color="chocolate", weight="bold")
-        plt.text(100,y_rescale*3e-12,'Relic Density', rotation=12, fontsize=text_fs, color="k", weight="bold")
+        plt.text(48,5.2e-9,'Relic Density', rotation=20, fontsize=text_fs, color="k", weight="bold")
         
         plt.title(r"$m_X=75$ MeV, $m_\chi =2$ MeV, $\alpha_D = 0.5$", loc='right', fontsize=15)
         plt.legend(loc="lower right", fontsize=9, framealpha=1.0)

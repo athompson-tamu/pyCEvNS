@@ -7,7 +7,7 @@ import multiprocessing as multi
 
 from numpy import log, log10, pi, exp, sin, cos, sin, sqrt, arccos
 from scipy.special import exp1
-from scipy.integrate import quad, cumtrapz
+from scipy.integrate import quad, dblquad, cumtrapz
 from scipy.optimize import fsolve
 
 import mpmath as mp
@@ -17,6 +17,12 @@ mp.dps = 15
 
 
 # Define cross-sections
+def axioelectric_xs(pe_xs, energy, z, a, ma, ge):
+    pe = np.interp(energy, pe_xs[:,0], pe_xs[:,1])*1e-24 / (100*meter_by_mev)**2
+    beta = sqrt(energy**2 - ma**2)
+    return 137 * 3 * ge**2 * pe * energy**2 * (1 - np.power(beta, 2/3)/3) / (16*pi*me**2 * beta)
+
+
 def primakoff_production_xs(energy, z, a, ma, g): #Tsai, '86
     if energy < ma:
         return 0
@@ -30,10 +36,31 @@ def primakoff_production_xs(energy, z, a, ma, g): #Tsai, '86
 def primakoff_scattering_xs(energy, z, ma, g):  # Avignone '87
     if energy < ma:
         return 0
-    beta = min(np.sqrt(energy ** 2 - ma ** 2) / energy, 0.999999)
-    chi = _screening(energy, ma)
+    beta = max(np.sqrt(energy ** 2 - ma ** 2)/energy, 0.95)
     prefactor = (1 / 137 / 2) * (g * z) ** 2
-    return prefactor * chi * (1 / beta) * ((1 + beta ** 2) / (2 * beta) * np.log((1 + beta) / (1 - beta)) - 1)
+    def xs(beta):
+        return max((1 / beta) * ((1 + beta ** 2) / (2 * beta) * np.log((1 + beta) / (1 - beta)) - 1), 0)
+    
+    return prefactor * xs(beta)
+
+def primakoff_scattering_diffxs(theta, ea, g, ma, z, r0):
+    if ea < ma:
+        return 0.0
+    prefactor = (g * z)**2 / (2*137)
+    #q2 = -2 * ea**2 * (1-cos(theta))
+    q2 = -2*ea**2 + ma**2 + 2*ea*sqrt(ea**2 - ma**2)*cos(theta)
+    beta = sqrt(ea**2 - ma**2)/ea
+    return prefactor * (1 - exp(q2 * r0**2 / 4))**2 * (beta * sin(theta)**3)/(1+beta**2 - 2*beta*cos(theta))**2
+
+def primakoff_scattering_xs_complete(ea, g, ma, z, r0):
+    return quad(primakoff_scattering_diffxs, 0, pi, args=(ea,g,ma,z,r0))[0]
+
+def primakoff_scattering_xs_CAF(ea, g, ma, z, r0):
+    if ea < ma:
+        return 0.0
+    prefactor = (g * z)**2 / (2*137)
+    eta2 = r0**2 * (ea**2 - ma**2)
+    return prefactor * (((2*eta2 + 1)/(4*eta2))*log(1+4*eta2) - 1)
 
 
 def primakoff_production_diffxs(theta, energy, z, ma, g=1):
@@ -42,7 +69,7 @@ def primakoff_production_diffxs(theta, energy, z, ma, g=1):
     pa = sqrt(energy**2 - ma**2)
     t = energy*(energy - pa*cos(theta)) + ma**2
     ff = 1 #_nuclear_ff(t, ma, z, 2*z)
-    return kAlpha * (g * z * ff * (ma * pa)**2 / t)**2 * sin(theta)**3 / 4
+    return kAlpha * (g * z * ff * pa**2 / t)**2 * sin(theta)**3 / 4
 
 
 def primakoff_production_cdf(theta, energy, z, ma):
@@ -149,26 +176,63 @@ class PrimakoffAxionFromBeam:
     def wgt_grid(self, w1, w2):
         return w1*w2
 
-    def simulate_single(self, photon, nsamples=1):
+    def simulate_full_MC(self, photon, nsamples=20):
         data_tuple = ([], [], [], [], [])
         
         if photon[1] < self.axion_mass:
             return data_tuple
-        unit_support = np.ones(nsamples)
+        unit_support = np.ones(nsamples*nsamples)
         rate = photon[0]
         e_gamma = photon[1]
         theta_gamma = photon[2]
-        
-        # Check integration bounds
-        if theta_gamma <= self.det_sa():
-            lower_bound = 0
-            upper_bound = self.det_sa() + theta_gamma
-        else:
-            lower_bound = theta_gamma - self.det_sa()
-            upper_bound = theta_gamma + self.det_sa()
-        theta_edges = np.linspace(lower_bound, upper_bound, nsamples+1)
+
+        # Get Phi_a and Theta_a
+        cosphi_a = np.linspace(0,2*pi, nsamples)
+        theta_edges = np.linspace(0, pi, nsamples+1)
         theta_a = (theta_edges[1:]+theta_edges[:-1])/2
-        theta_wgts = 0.5*primakoff_production_weights(theta_edges,e_gamma,self.target_z,self.axion_mass)
+        theta_wgts = primakoff_production_weights(theta_edges,e_gamma,self.target_z,self.axion_mass)
+        theta_axion = np.zeros(nsamples*nsamples)
+        total_wgt = np.zeros(nsamples*nsamples)
+        idx = 0
+        for i in range(nsamples):
+            for j in range(nsamples):
+                theta_axion[idx] = abs(arccos(sin(theta_gamma)*cosphi_a[j]*sin(theta_a[i]) \
+                                    + cos(theta_gamma)*cos(theta_a[i])))
+                total_wgt[idx] = theta_wgts[i] * (1 / nsamples)
+                idx += 1
+        
+        # Get axion Lorentz transformations and kinematics
+        br = self.branching_ratio(e_gamma)
+        axion_p = sqrt(e_gamma** 2 - self.axion_mass ** 2)
+        axion_v = axion_p / e_gamma
+        axion_boost = e_gamma / self.axion_mass
+        tau = 64 * pi / (self.axion_coupling ** 2 * self.axion_mass ** 3) * axion_boost
+        
+        # Get decay and survival probabilities
+        surv_prob =  mp.exp(-self.det_dist / meter_by_mev / axion_v / tau)
+        decay_in_detector = fsub(1,mp.exp(-self.det_length / meter_by_mev / axion_v / tau))
+
+        # Push back lists and weights
+        data_tuple[0].extend(e_gamma * unit_support) # elastic limit
+        data_tuple[1].extend(theta_axion)
+        data_tuple[2].extend(rate * br * surv_prob * total_wgt)  # scatter weights
+        data_tuple[3].extend(rate * br * surv_prob * decay_in_detector * total_wgt)  #decay weights
+        data_tuple[4].extend(unit_support * np.arcsin(sqrt(1-axion_v**2))) # beaming formula for iso decay
+        
+        return data_tuple
+
+    def simulate_1D(self, photon, nsamples=1):
+        data_tuple = ([], [], [], [], [])
+        
+        if photon[0] < self.axion_mass:
+            return data_tuple
+        unit_support = np.ones(nsamples)
+        rate = photon[1]
+        e_gamma = photon[0]
+        
+        theta_edges = np.linspace(0, self.det_sa(), nsamples+1)
+        theta_a = (theta_edges[1:]+theta_edges[:-1])/2
+        theta_wgts = primakoff_production_weights(theta_edges,e_gamma,self.target_z,self.axion_mass)
 
         # Get axion Lorentz transformations and kinematics
         br = self.branching_ratio(e_gamma)
@@ -189,6 +253,52 @@ class PrimakoffAxionFromBeam:
         data_tuple[4].extend(unit_support * np.arcsin(sqrt(1-axion_v**2))) # beaming formula for iso decay
         
         return data_tuple
+
+    def simulate_single(self, photon):
+        data_tuple = ([], [], [], [], [])
+        
+        if photon[1] < self.axion_mass:
+            return data_tuple
+        rate = photon[0]
+        e_gamma = photon[1]
+        theta_gamma = photon[2]
+        
+        # Simulate
+        def heaviside(theta, phi):
+            return self.det_sa() > arccos(cos(theta)*cos(theta_gamma) \
+                                   + cos(phi)*sin(theta)*sin(theta_gamma))
+        
+        norm = primakoff_production_xs(e_gamma, self.target_z, 2*self.target_z,
+                                       self.axion_mass, self.axion_coupling)
+        def integrand(theta, phi):
+            return (1/norm) * heaviside(theta, phi) * \
+                primakoff_production_diffxs(theta, e_gamma, self.target_z,
+                                            self.axion_mass, self.axion_coupling)
+        
+        convolution = np.vectorize(integrand)
+        integral = dblquad(convolution, 0, pi, -pi, pi)[0]
+
+        # Get the branching ratio
+        br = self.branching_ratio(e_gamma)
+        
+        # Get axion Lorentz transformations and kinematics
+        axion_p = sqrt(e_gamma** 2 - self.axion_mass ** 2)
+        axion_v = axion_p / e_gamma
+        axion_boost = e_gamma / self.axion_mass
+        tau = 64 * pi / (self.axion_coupling ** 2 * self.axion_mass ** 3) * axion_boost
+        
+        # Get decay and survival probabilities
+        surv_prob =  mp.exp(-self.det_dist / meter_by_mev / axion_v / tau)
+        decay_in_detector = fsub(1,mp.exp(-self.det_length / meter_by_mev / axion_v / tau))
+
+        # Push back lists and weights
+        data_tuple[0].extend(e_gamma) # elastic limit
+        data_tuple[1].extend(theta_gamma)
+        data_tuple[2].extend(rate * br * surv_prob * integral)  # scatter weights
+        data_tuple[3].extend(rate * br * surv_prob * decay_in_detector * integral)  #decay weights
+        data_tuple[4].extend(np.arcsin(sqrt(1-axion_v**2))) # beaming formula for iso decay
+        
+        return data_tuple
     
     def simulate(self, nsamples=10):
         #t1 = time.time()
@@ -201,9 +311,6 @@ class PrimakoffAxionFromBeam:
         with multi.Pool(max(1, multi.cpu_count()-1)) as pool:
             ntuple = pool.map(self.simulate_single, [f for f in self.photon_rates])
             pool.close()
-        
-        #t2 = time.time()
-        #print(t2-t1)
         
         for tup in ntuple:
             self.axion_energy.extend(tup[0])
@@ -221,11 +328,12 @@ class PrimakoffAxionFromBeam:
 
     def scatter_events(self, detector_number, detector_z, detection_time, threshold):
         res = 0
+        r0 = 2.2e-10 / meter_by_mev
         for i in range(len(self.scatter_axion_weight)):
             if self.axion_energy[i] >= threshold:
                 res += self.scatter_axion_weight[i] \
-                    * primakoff_scattering_xs(self.axion_energy[i], detector_z,
-                                              self.axion_mass, self.axion_coupling) \
+                    * primakoff_scattering_xs_CAF(self.axion_energy[i], self.axion_coupling, 
+                                                  self.axion_mass, detector_z, r0) \
                     * detection_time * detector_number * meter_by_mev ** 2
         return res
     

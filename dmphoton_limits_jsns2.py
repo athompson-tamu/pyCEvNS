@@ -14,9 +14,6 @@ rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
 rc('text', usetex=True)
 
 
-prompt_pdf = np.genfromtxt('data/ccm/arrivalTimePDF_prompt.txt', delimiter=',')
-delayed_pdf = np.genfromtxt('data/ccm/arrivalTimePDF_delayed.txt', delimiter=',')
-nin_pdf = np.genfromtxt('data/arrivalTimePDF_promptNeutrons.txt', delimiter=',')
 
 # get existing limits
 relic = np.genfromtxt('pyCEvNS/data/dark_photon_limits/relic.txt', delimiter=",")
@@ -101,7 +98,7 @@ def efficiency(pe):
 hi_energy_cut = 1000  # mev
 lo_energy_cut = 30  # mev
 hi_timing_cut = 0.25
-lo_timing_cut = 0.1
+lo_timing_cut = 0.0
 energy_edges = np.arange(lo_energy_cut, hi_energy_cut, 15)
 energy_bins = (energy_edges[:-1] + energy_edges[1:]) / 2
 timing_edges = np.linspace(lo_timing_cut, hi_timing_cut, 10)
@@ -233,7 +230,7 @@ def main():
     n_nu = GetNeutrinoEvents()
 
     # Set up limits.
-    mlist = np.logspace(0, np.log10(500), 100)
+    mlist = np.logspace(0, np.log10(500), 3)
     eplist = np.ones_like(mlist)
     tmp = np.logspace(-20, 0, 20)
 
@@ -241,13 +238,13 @@ def main():
     use_save = False
     if use_save == True:
         print("using saved data")
-        saved_limits = np.genfromtxt("limits/jsns2/dark_photon_limits_jsns_doublemed_withEta_20200520.txt", delimiter=",")
+        saved_limits = np.genfromtxt("limits/jsns2/dark_photon_limits_jsns_doublemed_00-25.txt", delimiter=",")
         mlist = saved_limits[:,0]
         eplist = saved_limits[:,1]
     else:
         # Binary search.
         print("Running dark photon limits...")
-        outlist = open("limits/jsns2/dark_photon_limits_jsns_doublemed_withEta_20200520.txt", "w")
+        outlist = open("limits/jsns2/dark_photon_limits_jsns_doublemed_00-25.txt", "w")
         for i in range(mlist.shape[0]):
             print("Running m_X = ", mlist[i])
             hi = np.log10(tmp[-1])

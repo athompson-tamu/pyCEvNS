@@ -1,5 +1,5 @@
 import sys
-sys.path.append("../")
+sys.path.append("/Users/adrianthompson/physics/dark_photon/pyCEvNS_physics_analysis/pyCEvNS/")
 
 import numpy as np
 from numpy import pi

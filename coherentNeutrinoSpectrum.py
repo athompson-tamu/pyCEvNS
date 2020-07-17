@@ -21,6 +21,7 @@ ac_bon = np.genfromtxt('data/coherent/data_anticoincidence_beamOn.txt', delimite
 c_bon = np.genfromtxt('data/coherent/data_coincidence_beamOn.txt', delimiter=',')
 ac_boff = np.genfromtxt('data/coherent/data_anticoincidence_beamOff.txt', delimiter=',')
 c_boff = np.genfromtxt('data/coherent/data_coincidence_beamOff.txt', delimiter=',')
+nin_pdf = np.genfromtxt('data/coherent/arrivalTimePDF_promptNeutrons.txt', delimiter=',')
 
 
 
@@ -40,13 +41,17 @@ def prompt_time(t):
     else:
         return prompt_pdf[int((t-0.25)/0.5), 1]
 
-
 def delayed_time(t):
     if t < 0.25 or t > 11.75:
         return 0
     else:
         return delayed_pdf[int((t-0.25)/0.5), 1]
 
+def nin_time(t):
+    if t < 0.25 or t > 11.75:
+        return 0
+    else:
+        return nin_pdf[int((t-0.25)/0.5), 1]
 
 def efficiency(pe):
   a = 0.6655
@@ -65,7 +70,7 @@ def efficiency(pe):
 
 hi_energy_cut = 52/pe_per_mev
 lo_energy_cut = 0/pe_per_mev
-hi_timing_cut = 1.75
+hi_timing_cut = 6.25
 lo_timing_cut = 0.0
 energy_edges = np.arange(lo_energy_cut, hi_energy_cut, 2/pe_per_mev) # energy resolution ~2keV
 energy_bins = (energy_edges[:-1] + energy_edges[1:]) / 2
@@ -89,23 +94,20 @@ ac_bon_meas = np.delete(ac_bon, indx, axis=0)
 # Get the observed data
 n_meas = c_bon_meas.copy()
 
-# Can subtract backgrounds if needed
-#for i in range(c_bon_meas.shape[0]):
-#    n_meas[i, 2] -= ac_bon_meas[i, 2]
-
 # Convert PE to MeV in the data array
 n_meas[:,0] *= 1/pe_per_mev
 
 n_obs = c_bon_meas[:, 2]
 flat_energies = n_meas[:,0]
 flat_times = n_meas[:,1]
+kevnr = flat_energies*1000
+kevnr_bins = energy_bins*1000
+kevnr_edges = energy_edges*1000
+
 
 # Histogram observed data
 obs_hist, obs_bin_edges = np.histogram(n_meas[:,0], weights=n_meas[:,2], bins=energy_edges)
 n_obs_err = np.sqrt(obs_hist + (0.28*obs_hist)**2)  # poisson error + systematics in quadrature
-
-print(obs_hist.shape[0], n_obs_err.shape[0])
-
 
 # Get background
 n_bg = ac_bon_meas[:, 2]
@@ -149,22 +151,22 @@ pion_azimuth = np.arccos(Pi0Info[:,3] / np.sqrt(Pi0Info[:,1]**2 + Pi0Info[:,2]**
 pion_cos = np.cos(np.pi/180 * Pi0Info[:,0])
 pion_flux = np.array([pion_azimuth, pion_cos, pion_energy])
 pion_flux = pion_flux.transpose()
-def GetDMEvents(g, m_dp, m_chi, m_med):
+def GetDMEvents(g, m_dp, m_chi, m_med, lifetime=0.001):
     dm_gen = DmEventsGen(dark_photon_mass=m_dp, dark_matter_mass=m_chi,
                          life_time=0.001, expo=exposure, detector_type='csi')
     brem_flux = DMFluxIsoPhoton(brem_photons, dark_photon_mass=m_dp, coupling=1,
                                 dark_matter_mass=m_chi, pot_sample=1e5,
-                                sampling_size=1000, life_time=0.0001,
+                                sampling_size=1000, life_time=lifetime,
                                 verbose=False)
     pim_flux = DMFluxFromPiMinusAbsorption(dark_photon_mass=m_dp,
                                            coupling_quark=1,
                                            dark_matter_mass=m_chi,
                                            pion_rate=pim_rate,
-                                           life_time=0.0001)
+                                           life_time=lifetime)
     pi0_flux = DMFluxFromPi0Decay(pi0_distribution=pion_flux,
                                   dark_photon_mass=m_dp, coupling_quark=1,
                                   dark_matter_mass=m_chi,
-                                  life_time=0.0001)
+                                  life_time=lifetime)
     
     dm_gen.fx = brem_flux
     brem_events = dm_gen.events(m_med, g, energy_edges, timing_edges,
@@ -181,7 +183,7 @@ def GetDMEvents(g, m_dp, m_chi, m_med):
     return brem_events[0] + pim_events[0] + pi0_events[0]
 
 
-
+"""
 m_dp_bf = np.power(10, 0.213973009690852356e1)
 m_chi_bf = m_dp_bf/3
 eps_bf = np.power(10,-0.708361403497243902e1)
@@ -190,9 +192,6 @@ dm_best_fit = GetDMEvents(m_chi=m_chi_bf, m_dp=m_dp_bf, m_med=m_dp_bf, g=eps_bf)
 
 # Plot best-fit
 density = False
-kevnr = flat_energies*1000
-kevnr_bins = energy_bins*1000
-kevnr_edges = energy_edges*1000
 plt.hist([kevnr,kevnr,kevnr,kevnr], weights=[n_prompt, n_delayed, n_bg, dm_best_fit],
          bins=kevnr_edges, stacked=True, histtype='stepfilled', density=density,
          color=['teal','tan', 'indianred', 'lightsteelblue'],
@@ -202,45 +201,69 @@ plt.vlines(kevnr_edges[8], 0, 100, ls='dashed')
 plt.vlines(kevnr_edges[16], 0, 100, ls='dashed')
 plt.arrow(kevnr_edges[8], 30, 2, 0, head_width=1, color='k')
 plt.arrow(kevnr_edges[16], 30, -2, 0, head_width=1, color='k')
-plt.xlabel(r"$E_r$ [MeV]", fontsize=15)
-plt.ylabel(r"Events", fontsize=15)
+plt.xlabel(r"$E_r$ [MeV]", fontsize=20)
+plt.ylabel(r"Events", fontsize=20)
 plt.title(r"COHERENT CsI, $t < 1.5$ $\mu$s", loc="right", fontsize=15)
 plt.ylim((0,58))
 plt.xlim((0,42.5))
 plt.legend(fontsize=13, framealpha=1, loc='upper right')
-plt.xticks(fontsize=13)
-plt.yticks(fontsize=13)
+plt.xticks(fontsize=15)
+plt.yticks(fontsize=15)
 plt.tight_layout()
 plt.show()
 plt.clf()
 
-dm_events1 = GetDMEvents(m_chi=1, m_dp=75, m_med=25, g=0.75e-7)
-dm_events2 = GetDMEvents(m_chi=20, m_dp=120, m_med=25, g=0.75e-7)
+"""
+dm_events1 = GetDMEvents(m_chi=5, m_dp=75, m_med=15, g=0.3e-8)
+dm_events2 = GetDMEvents(m_chi=25, m_dp=75, m_med=75, g=0.1e-7)
 
 # Plot Dark Matter against Neutrino Spectrum
 density = False
-plt.hist([flat_energies,flat_energies], weights=[n_prompt, n_delayed], bins=energy_edges*pe_per_mev,
-         stacked=True, histtype='stepfilled', density=density, color=['teal','tan'], label=["Prompt", "Delayed"])
-plt.hist(flat_energies*pe_per_mev,weights=dm_events1,bins=energy_edges*pe_per_mev,
-         histtype='step', density=density, label=r"DM ($m_{\chi} = 1$ MeV)")
-plt.hist(flat_energies*pe_per_mev,weights=dm_events2,bins=energy_edges*pe_per_mev,
-         histtype='step', density=density, label=r"DM ($m_{\chi} = 20$ MeV)")
-plt.xlabel(r"$E_r$ [MeV]")
-plt.ylabel(r"a.u.")
-plt.legend()
+plt.hist([kevnr,kevnr,kevnr], weights=[n_prompt, n_delayed, n_bg], bins=kevnr_edges,
+         stacked=True, histtype='stepfilled', density=density, color=['teal','tan', 'silver'], label=[r"Prompt $\nu$", r"Delayed $\nu$", "AC Beam-On Background"])
+plt.hist(kevnr,weights=dm_events1,bins=kevnr_edges, color='blue',
+         histtype='step', density=density, label=r"DM ($m_\chi = 5$ MeV, $m_V = 15$ MeV)")
+plt.hist(kevnr,weights=dm_events2,bins=kevnr_edges, color='crimson',
+         histtype='step', density=density, label=r"DM ($m_\chi = 25$ MeV, $m_V = 75$ MeV)")
+plt.vlines(kevnr_edges[8], 0, 100, ls='dashed')
+plt.vlines(kevnr_edges[16], 0, 100, ls='dashed')
+plt.arrow(kevnr_edges[8], 30, 2, 0, head_width=1, color='k')
+plt.arrow(kevnr_edges[16], 30, -2, 0, head_width=1, color='k')
+plt.title(r"COHERENT CsI, $t < 1.5$ $\mu$s", loc="right", fontsize=15)
+plt.xlabel(r"$E_r$ [keV]", fontsize=20)
+plt.ylabel(r"Events", fontsize=20)
+plt.xticks(fontsize=15)
+plt.yticks(fontsize=15)
+plt.legend(fontsize=15, loc='upper right')
+plt.xlim((kevnr_edges[2], kevnr_edges[-1]))
+plt.ylim((0,100))
+plt.tight_layout()
 plt.show()
 plt.clf()
 
 
-plt.hist([flat_times,flat_times], weights=[n_prompt, n_delayed], bins=timing_edges,
-         stacked=True, histtype='stepfilled', density=density, color=['teal','tan'], label=["Prompt", "Delayed"])
-plt.hist(flat_times,weights=dm_events1,bins=timing_edges,
-         histtype='step', density=density, label=r"DM ($m_{\chi} = 1$ MeV)")
-plt.hist(flat_times,weights=dm_events2,bins=timing_edges,
-         histtype='step', density=density, label=r"DM ($m_{\chi} = 20$ MeV)")
-plt.xlabel(r"$t$ [$\mu$s]")
-plt.ylabel(r"a.u.")
-plt.legend()
+"""
+dm_events1 = GetDMEvents(m_chi=25, m_dp=75, m_med=25, g=1e-7, lifetime=0.001)
+dm_events2 = GetDMEvents(m_chi=25, m_dp=75, m_med=25, g=1e-7, lifetime=1)
+dm_events3 = GetDMEvents(m_chi=5, m_dp=138, m_med=25, g=1e-7, lifetime=1)
+
+density=True
+plt.hist([flat_times,flat_times,flat_times], weights=[n_prompt, n_delayed, n_bg], bins=timing_edges,
+         stacked=True, histtype='stepfilled', density=density, color=['teal','tan', 'silver'], label=[r"Prompt $\nu$", r"Delayed $\nu$", "AC Beam-On Background"])
+plt.hist(flat_times,weights=dm_events1,bins=timing_edges, color='blue',
+         histtype='step', density=density, label=r"DM ($M_X = 75$ MeV, $\tau < 0.001$ $\mu$s)")
+plt.hist(flat_times,weights=dm_events2,bins=timing_edges, color='crimson',
+         histtype='step', density=density, label=r"DM ($M_X = 75$ MeV, $\tau = 1$ $\mu$s)")
+plt.hist(flat_times,weights=dm_events3,bins=timing_edges, color='darkorange',
+         histtype='step', density=density, label=r"DM ($M_X = 138$ MeV, $\tau = 1$ $\mu$s)")
+plt.title(r"COHERENT CsI", loc="right", fontsize=15)
+plt.xlabel(r"$t$ [$\mu$s]", fontsize=20)
+plt.ylabel(r"a.u.", fontsize=20)
+plt.xticks(fontsize=15)
+plt.yticks(fontsize=15)
+plt.legend(fontsize=15, loc='upper right')
+plt.xlim((0,6))
+plt.tight_layout()
 plt.show()
 
 
@@ -248,3 +271,4 @@ plt.show()
 
 
 
+"""

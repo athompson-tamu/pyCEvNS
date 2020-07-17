@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import sys
 
 def main():
-  flux = np.genfromtxt(".\data\jsns\Hg_3GeV\gamma_process\Gamma_eBrem.txt")  # expect (angle, px, py, pz, E)
+  flux = np.genfromtxt("/data/jsns/Hg_3GeV/gamma_process/Gamma_eBrem.txt")  # expect (angle, px, py, pz, E)
   nbins=100
   edges = np.linspace(min(flux[:,4]), max(flux[:,4]), nbins+1)
   hist, edges = np.histogram(flux[:,4], bins=edges)

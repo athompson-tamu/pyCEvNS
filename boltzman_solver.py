@@ -49,28 +49,32 @@ def to_omegah2(sol, ma, mchi_ratio):
     return sol.y[0, -1]/ss(1, m)*hh(m)*s0/rho0*0.678**2*m
 
 
-mtlist_n = np.logspace(np.log10(me*3+0.5), np.log10(mmu*3), 20)
+print("calculating electron contribution")
+mtlist_n = np.logspace(np.log10(me*3+0.5), np.log10(mmu*3), 30)
+#mtlist_n = np.logspace(np.log10(mmu*3),3,20)
+
 etplist_n = np.zeros_like(mtlist_n)
-tmp = np.linspace(-7, -4)
 for i in range(mtlist_n.shape[0]):
-    lo, hi = -7, -3
+    print("m = ", mtlist_n[i])
+    lo, hi = -9, 0
     while hi - lo > 0.01:
-        omg = omegah2(10**((hi+lo)/2), mtlist_n[i])
+        omg = omegah2(10**((hi+lo)/2), mtlist_n[i], mchi_ratio=3)
         if omg > 0.1323:
             lo = (hi+lo)/2
         else:
             hi = (hi+lo)/2
 #     print(omg)
     etplist_n[i] = (hi+lo)/2
-    
-    
+
+
+print("calculating muon contribution")
 mtlistmu = np.logspace(np.log10(mmu*3), 3, 20)
 etplistmu = np.zeros_like(mtlistmu)
-tmp = np.linspace(-7, -4)
 for i in range(mtlistmu.shape[0]):
-    lo, hi = -7, -3
+    print("m = ", mtlistmu[i])
+    lo, hi = -9, 0
     while hi - lo > 0.01:
-        omg = omegah2(10**((hi+lo)/2), mtlistmu[i], mf=np.array([me, mmu]))
+        omg = omegah2(10**((hi+lo)/2), mtlistmu[i], mf=np.array([me, mmu]), mchi_ratio=3)
         if omg > 0.1323:
             lo = (hi+lo)/2
         else:
@@ -86,18 +90,19 @@ y_rescale = 0.5 / (3**4)
 relic = np.genfromtxt('pyCEvNS/data/dark_photon_limits/relic.txt', delimiter=",")
 
 # write new limits to txt
-relic_array = np.array([np.hstack((mtlist_n, mtlistmu)), (10**np.hstack((etplist_n, etplistmu)))**2])
+relic_array = np.array([np.hstack((mtlist_n,mtlistmu)), (10**np.hstack((etplist_n,etplistmu)))**2])
 relic_array = relic_array.transpose()
-np.savetxt('data/relic/relic_density.txt', relic_array, delimiter=",")
+np.savetxt('data/relic/relic_dark_photon.txt', relic_array, delimiter=",")
 
 
 fig, ax = plt.subplots(figsize=(4*1.2, 3*1.2))
-ax.plot(np.hstack((mtlist_n, mtlistmu)), y_rescale*(10**np.hstack((etplist_n, etplistmu)))**2, label='Relic (recalculated)')
+ax.plot(np.hstack((mtlist_n,mtlistmu)), y_rescale*(10**np.hstack((etplist_n,etplistmu)))**2, label='Relic (recalculated)')
 ax.plot(relic[:,0], y_rescale*relic[:,1], color="k", label="Relic")
 ax.set_ylabel(r"$Y$")
 ax.set_xlabel(r"$m_V$")
 plt.xscale('log')
 plt.yscale('log')
+plt.legend()
 plt.tight_layout()
 plt.show()
 plt.clf()

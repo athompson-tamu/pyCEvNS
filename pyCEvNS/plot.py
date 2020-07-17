@@ -59,7 +59,7 @@ class CrediblePlot:
         cl = np.sort(credible_level)[::-1]
         if smooth:
             countour = False
-            by = signal.savgol_filter(biny, 5, 2)
+            by = signal.savgol_filter(biny, 5, 3)
             if flip_axes:
                 ax.plot(by / binw, binx, label=label, color=color, ls=ls, linewidth=lwidth) # 6 for grid, 2 for 1d
             else:
@@ -90,7 +90,8 @@ class CrediblePlot:
         return fig, ax
 
     def credible_2d(self, idx: tuple, credible_level=(0.6827, 0.9545), nbins=80, ax=None,
-                    center=None, heat=False, xlim=None, ylim=None, mark_best=False, color='b'):
+                    center=None, heat=False, xlim=None, ylim=None, mark_best=False, color='b',
+                    alpha_range=(0.2,0.3)):
         """
         plot the correlation between parameters
         :param idx: the index of the two parameters to be ploted
@@ -144,7 +145,7 @@ class CrediblePlot:
             return im
         else:
             cl = np.sort(credible_level)[::-1]
-            al = np.linspace(0.2, 0.3, len(cl))
+            al = np.linspace(alpha_range[0], alpha_range[1], len(cl))
             cll = 0
             for ic in range(len(cl)):
                 cz = np.zeros_like(zv)

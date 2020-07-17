@@ -2,12 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from pyCEvNS.helper import *
-from pyCEvNS.constants import *
-
 from matplotlib.pylab import rc
-
-
 rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
 rc('text', usetex=True)
 
@@ -66,7 +61,7 @@ for i in range(0,gamma_e.shape[0]):
 # Write the gamma info to txt
 gamma_data = np.array([gam_e, gam_px, gam_py, gam_pz, gam_theta_z])
 gamma_data = gamma_data.transpose()
-np.savetxt("data/dune/hepmc_gamma_flux_from_pi0.txt", gamma_data)
+#np.savetxt("data/dune/hepmc_gamma_flux_from_pi0.txt", gamma_data)
 
 # get number of photons less than 1 degree.
 print(gam_theta_z[180*gam_theta_z/np.pi < 1.1].shape[0], gam_theta_z.shape[0])
@@ -90,14 +85,11 @@ bins = np.linspace(0, 80, 120)
 density=False
 wgt_pi0 = np.ones_like(pi0_e) * scale
 wgt_gam = np.ones_like(gam_e) * scale
-plt.hist(pi0_e, weights=wgt_pi0, bins=bins, histtype='step', label=r"$\pi^0$", density=density)
-#plt.hist(gamma1_p4[0,:], bins=bins, histtype='step', label=r"$\gamma_1$ (mysim)", density=density)
-#plt.hist(gamma2_p4[0,:], bins=bins, histtype='step', label=r"$\gamma_2$ (mysim)", density=density)
-plt.hist(gam_e,  weights=wgt_gam, bins=bins, histtype='step', label=r"$\gamma$", density=density)
+plt.hist(gam_e,  weights=wgt_gam, bins=bins, histtype='step', density=density)
 plt.xlabel(r"$E$ [GeV]", fontsize=15)
 plt.ylabel("Counts/POT", fontsize=15)
 plt.yscale('log')
-plt.title("Pythia8", loc="right")
+plt.title(r"Pythia8 $\gamma$", loc="right")
 plt.legend(framealpha=1.0, loc="upper right", fontsize=15)
 plt.show()
 
