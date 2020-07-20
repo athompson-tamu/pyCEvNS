@@ -4,6 +4,11 @@ import numpy as np
 import matplotlib.patches as patches
 import matplotlib.gridspec as gridspec
 
+from matplotlib.pylab import rc
+rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
+rc('text', usetex=True)
+
+
 namelist_nsi = [r'$\epsilon^{e,V}_{ee}$',r'$\epsilon^{e,V}_{\mu\mu}$', r'$\epsilon^{e,V}_{\tau\tau}$',
             r'$\epsilon^{e,V}_{e\mu}$',r'$\epsilon^{e,V}_{e\tau}$',
             r'$\epsilon^{e,V}_{\mu\tau}$', r'$\epsilon^{q,V}_{ee}$',r'$\epsilon^{q,V}_{\mu\mu}$', r'$\epsilon^{q,V}_{\tau\tau}$',
@@ -25,17 +30,23 @@ all_namelist = [r'$\epsilon^{e,V}_{ee}$', r'$\epsilon^{e,V}_{\mu\mu}$', r'$\epsi
                 r'$\epsilon^{d,V}_{ee}$', r'$\epsilon^{d,V}_{\mu\mu}$', r'$\epsilon^{d,V}_{\tau\tau}$',
                 r'$\epsilon^{d,V}_{e\mu}$', r'$\epsilon^{d,V}_{e\tau}$', r'$\epsilon^{d,V}_{\mu\tau}$']
 
+
+# Define filenames
+coherent_filename = "multinest_jhep/coherent_csi_ar_jhep.txt"
+coherent_filename_sumUD = "multinest_jhep/coherent_csi_ar_jhep_sumUD.txt"
+
+
 # STAGE 1
-borex_vector_solars = CrediblePlot("nsi_multinest/borexino_12dim_nsi_nuissance/borexino_vector_nsi_nuisance.txt")
-coherent_ar_csi = CrediblePlot("nsi_multinest/coherent_csi_ar/coherent_csi_ar.txt")
+borex_vector_solars = CrediblePlot("multinest_jhep/borexino_vector_nsi_nuisance.txt")
+coherent_ar_csi = CrediblePlot(coherent_filename)
 
 # STAGE 2
-xenon_atmos = CrediblePlot("nsi_multinest/all_nsi_xenon_atmos_coh_prior/all_nsi_xenon_atmos_coh_prior.txt")
-xenon_vector_solars = CrediblePlot("nsi_multinest/all_nsi_xenon_borexino_prior/vector_nsi_xenon_borexino_prior.txt")
+xenon_atmos = CrediblePlot("multinest_jhep/all_nsi_xenon_atmos_coh_prior_jhep.txt")
+xenon_vector_solars = CrediblePlot("multinest_jhep/vector_nsi_xenon_borexino_prior.txt")
 
 # STAGE 3
-priorflow = CrediblePlot("nsi_multinest/prior_flow_ud_combined/prior_flow_ud_combined.txt")
-priorflow_18d = CrediblePlot("nsi_multinest/prior_flow_18D_v2/prior_flow_18D_v2_TTFIXED.txt")
+priorflow = CrediblePlot("multinest_jhep/prior_flow_ud_combined.txt")
+priorflow_18d = CrediblePlot("multinest_jhep/prior_flow_18D_v2_TTFIXED.txt")
 
 
 # Inferno
@@ -50,11 +61,11 @@ color_1 = "#FDAF31"
 
 # Plot L/R Priorflow
 print("Plotting Priorflow L/R")
-filelist = ["nsi_multinest/borexino_12dim_nsi_nuissance/borexino_12dim_nsi_nuissance.txt"]
+filelist = ["multinest_jhep/borexino_12dim_nsi_nuissance.txt"]
 idx_list = [((0,1,2,3,4,5,6,7,8,9,10,11),(0,1,2,3,4,5,6,7,8,9,10,11))]
 colors=[color_2, color_1]
 
-left_right_12d = CrediblePlot("nsi_multinest/all_nsi_xenon_borexino_prior/all_nsi_xenon_borexino_prior.txt")
+left_right_12d = CrediblePlot("multinest_jhep/all_nsi_xenon_borexino_prior.txt")
 
 fig, ax = left_right_12d.special_grid(filelist, (0,1,2,3,4,5,6,7,8,9,10,11), idx_list,
                                               (0,0,0,0,0,0,0,0,0,0,0,0), lr_names, colors, nbins=40)
@@ -63,14 +74,12 @@ fig.savefig("plots/credible/priorflow/priorflow_LR_grid_overlay.pdf")
 
 
 
-
-
 # 2D comparison with 12 NSI (U+D)
 print("Plotting Priorflow U+D summed 2d grid special overlay")
-filelist = ["nsi_multinest/coherent_csi_ar/coherent_csi_ar_sumUD.txt",
-            "nsi_multinest/all_nsi_xenon_atmos_coh_prior/all_nsi_xenon_atmos_coh_prior_sumUD.txt",
-            "nsi_multinest/borexino_12dim_nsi_nuissance/borexino_vector_nsi_nuisance.txt",
-            "nsi_multinest/all_nsi_xenon_borexino_prior/vector_nsi_xenon_borexino_prior.txt"]
+filelist = [coherent_filename_sumUD,
+            "multinest_jhep/all_nsi_xenon_atmos_coh_prior_jhep_sumUD.txt",
+            "multinest_jhep/borexino_vector_nsi_nuisance.txt",
+            "multinest_jhep/vector_nsi_xenon_borexino_prior.txt"]
 idx_list = [((0,1,2,3,4),(6,7,9,10,11)),
             ((0,1,2,3,4,5),(6,7,8,9,10,11)),
             ((0,1,2,3,4,5),(0,1,2,3,4,5)),
@@ -78,7 +87,7 @@ idx_list = [((0,1,2,3,4),(6,7,9,10,11)),
 colors=[color_3, color_1, color_2, color_1, color_2]
 
 #priorflow_12d = CrediblePlot("special_posteriors/priorflow_ud_summed_12d.txt")
-priorflow_12d = CrediblePlot("nsi_multinest/prior_flow_18D_v2/prior_flow_18D_v2_sumUD_TTFIXED.txt")
+priorflow_12d = CrediblePlot("multinest_jhep/prior_flow_18D_v2_sumUD_TTFIXED.txt")
 fig, ax = priorflow_12d.special_grid(filelist, (0,1,2,3,4,5,6,7,8,9,10,11), idx_list,
                                      (0,0,0,0,0,0,0,0,0,0,0,0), namelist_nsi, colors,
                                      nbins=30, credible_level=(0.96,))
@@ -90,10 +99,10 @@ fig.savefig("plots/credible/priorflow/priorflow_12d_grid_overlay.pdf")
 
 # 2D comparison with 18 NSI (U+D)
 print("Plotting Priorflow 18d grid special overlay")
-filelist = ["nsi_multinest/coherent_csi_ar/coherent_csi_ar.txt",
-            "nsi_multinest/all_nsi_xenon_atmos_coh_prior/all_nsi_xenon_atmos_coh_prior.txt",
-            "nsi_multinest/borexino_12dim_nsi_nuissance/borexino_vector_nsi_nuisance.txt",
-            "nsi_multinest/all_nsi_xenon_borexino_prior/vector_nsi_xenon_borexino_prior.txt"]
+filelist = [coherent_filename,
+            "multinest_jhep/all_nsi_xenon_atmos_coh_prior_jhep.txt",
+            "multinest_jhep/borexino_vector_nsi_nuisance.txt",
+            "multinest_jhep/vector_nsi_xenon_borexino_prior.txt"]
 idx_list = [((0,1,2,3,4,5,6,7,8,9),(6,7,9,10,11,12,13,15,16,17)),
             ((0,1,2,3,4,5,6,7,8,9,10,11),(6,7,8,9,10,11,12,13,14,15,16,17)),
             ((0,1,2,3,4,5),(0,1,2,3,4,5)),
@@ -110,31 +119,6 @@ fig.savefig("plots/credible/priorflow/priorflow_18d_grid_overlay.pdf")
 
 
 
-"""
-print("---- SUM UD CREDIBLES ---")
-plt.clf()
-coherent_UD = CrediblePlot("nsi_multinest/coherent_csi_ar/coherent_csi_ar_sumUD.txt")
-priorflow_UD = CrediblePlot("nsi_multinest/prior_flow_18D_v2/prior_flow_18D_v2_sumUD_TTFIXED.txt")
-print("u+d: EE")
-coherent_UD.credible_1d(idx=0, smooth=True, nbins=40, color=color_3)
-priorflow_UD.credible_1d(idx=6, smooth=True, nbins=40, color=color_3)
-print("u+d: MM")
-coherent_UD.credible_1d(idx=1, smooth=True, nbins=40, color=color_3)
-priorflow_UD.credible_1d(idx=7, smooth=True, nbins=40, color=color_3)
-print("u+d: TT")
-priorflow_UD.credible_1d(idx=8, smooth=True, nbins=40, color=color_3)
-print("u+d: EM")
-coherent_UD.credible_1d(idx=2, smooth=True, nbins=40, color=color_3)
-priorflow_UD.credible_1d(idx=9, smooth=True, nbins=40, color=color_3)
-print("u+d: ET")
-coherent_UD.credible_1d(idx=3, smooth=True, nbins=40, color=color_3)
-priorflow_UD.credible_1d(idx=10, smooth=True, nbins=40, color=color_3)
-print("u+d: MT")
-coherent_UD.credible_1d(idx=4, smooth=True, nbins=40, color=color_3)
-priorflow_UD.credible_1d(idx=11, smooth=True, nbins=40, color=color_3)
-plt.clf()
-
-"""
 
 print("Plotting priorflow comparison")
 x = np.linspace(-1,1,10)

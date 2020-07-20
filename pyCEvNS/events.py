@@ -587,9 +587,11 @@ class NeutrinoElectronElasticVector:
             res *= detector.detectoin_efficiency(er)
         return res
 
-    def events(self, ea, eb, flavor, flux: NeutrinoFlux, detector: Detector, exposure):
+    def events(self, ea, eb, flavor, flux: NeutrinoFlux, detector: Detector, exposure, ntargets=None):
         def func(er):
             return self.rates(er, flavor, flux, detector)
+        if ntargets is not None:
+            return quad(func, ea, eb)[0] * ntargets * 24 * 60 * 60
         return quad(func, ea, eb)[0] * exposure * mev_per_kg * 24 * 60 * 60 / np.dot(detector.m, detector.frac)
 
     def change_parameters(self):

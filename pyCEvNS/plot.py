@@ -88,6 +88,7 @@ class CrediblePlot:
         xleft, xright = ax.get_xlim()
         ybottom, ytop = ax.get_ylim()
         ax.set_aspect(abs((xright-xleft)/(ybottom-ytop)))
+        ax.tick_params(axis='both', which='major', labelsize=30)
         return fig, ax
 
     def credible_2d(self, idx: tuple, credible_level=(0.6827, 0.9545), nbins=80, ax=None,
@@ -163,6 +164,7 @@ class CrediblePlot:
         xleft, xright = ax.get_xlim()
         ybottom, ytop = ax.get_ylim()
         ax.set_aspect(abs((xright - xleft) / (ybottom - ytop)))
+        ax.tick_params(axis='both', which='major', labelsize=30)
         return fig, ax
 
     def credible_grid(self, idx: tuple, test_point: tuple, names=None,
@@ -177,7 +179,7 @@ class CrediblePlot:
         :return: fig and list of axes
         """
         lth = len(idx)
-        fig = plt.figure(figsize=(lth*5, lth*5))
+        fig = plt.figure(figsize=(lth, lth))
         grid = fig.add_gridspec(lth, lth)
         axes = [[None]*lth]*lth
         for i in range(lth):
@@ -190,21 +192,21 @@ class CrediblePlot:
                         flip = False
                     self.credible_1d(i, credible_level, nbins, ax, color=color, flip_axes=flip)
                     if names is not None:
-                        ax.tick_params(labelsize=25)
+                        ax.tick_params(labelsize=6)
                         if flip == False:
-                            ax.set_ylabel('p', fontsize=35)
+                            ax.set_ylabel('p', fontsize=6)
                         else:
-                            ax.set_ylabel('p', fontsize=35)
+                            ax.set_ylabel('p', fontsize=6)
                             #ax.xaxis.set_label_position('top')
                             #ax.xaxis.tick_top()
                 else:
                     self.credible_2d((j, i), credible_level, nbins, ax, color=color)
-                    plt.plot(test_point[j], test_point[i], marker="*", c='r', markersize='20')
-                    ax.tick_params(labelsize=25)
+                    plt.plot(test_point[j], test_point[i], marker="*", c='k', markersize='5')
+                    ax.tick_params(labelsize=6)
                     if names is not None and i==lth-1:
-                        ax.set_xlabel(names[j], fontsize=35)
+                        ax.set_xlabel(names[j], fontsize=6)
                     if names is not None and j==0:
-                        ax.set_ylabel(names[i], fontsize=35)
+                        ax.set_ylabel(names[i], fontsize=6)
         fig.tight_layout()
         return fig, axes
 

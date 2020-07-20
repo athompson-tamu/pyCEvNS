@@ -3,6 +3,10 @@ import json
 import numpy as np
 from numpy import log, exp, pi, zeros, genfromtxt
 import matplotlib.pyplot as plt
+from matplotlib.pylab import rc
+rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
+rc('text', usetex=True)
+
 from scipy.stats import norm
 from scipy.ndimage import gaussian_filter, generic_filter1d
 from scipy.special import erfinv
@@ -80,14 +84,14 @@ def EventsGenerator(params, expo, flux_factory, osc_factory, bins):
 
   # Construct the NSI and flux-oscillation-detection pipeline.
   nsi = NSIparameters(0)
-  #nsi.epel = {'ee': params[0], 'mm': params[2], 'tt': params[4],
-   #           'em': params[6], 'et': params[8], 'mt': params[10]}
-  #nsi.eper = {'ee': params[1], 'mm': params[3], 'tt': params[5],
-   #           'em': params[7], 'et': params[9], 'mt': params[11]}
-  nsi.epel = {'ee': 0, 'mm': 0, 'tt': params[0],
-              'em': 0, 'et': params[1], 'mt': 0}
-  nsi.eper = {'ee': 0, 'mm': 0, 'tt': params[2],
-              'em': 0, 'et': params[3], 'mt': 0}
+  nsi.epel = {'ee': params[0], 'mm': params[2], 'tt': params[4],
+              'em': params[6], 'et': params[8], 'mt': params[10]}
+  nsi.eper = {'ee': params[1], 'mm': params[3], 'tt': params[5],
+              'em': params[7], 'et': params[9], 'mt': params[11]}
+  #nsi.epel = {'ee': 0, 'mm': 0, 'tt': params[0],
+   #           'em': 0, 'et': params[1], 'mt': 0}
+  #nsi.eper = {'ee': 0, 'mm': 0, 'tt': params[2],
+   #           'em': 0, 'et': params[3], 'mt': 0}
   gen = NeutrinoElectronElasticVector(nsi)
   osc = osc_factory.get(oscillator_name='solar', nsi_parameter=nsi,
                         oscillation_parameter=OSCparameters())
@@ -101,10 +105,11 @@ def EventsGenerator(params, expo, flux_factory, osc_factory, bins):
     e_b = energy_arr[j]
     for f in range(0, flav_arr.shape[0]):  # Integrate over flavors in each energy bin
       observed_events[this_obs] += gen.events(e_a, e_b, str(flav_arr[f]), transformed_flux, det,
-                                              exposure = None, target_exposure=expo, smearing=None)
+                                              exposure=1, ntargets=expo)
     # Iterate left edge
     this_obs += 1
     e_a = e_b
+  print(np.sum(observed_events))
 
   return observed_events
 
@@ -186,6 +191,7 @@ def main():
   borex_exp_100tday = 920.84  # exposure for phase 2 in 100t - days
   target_e = 3.307e31  # electrons per 100 ton
   exposure = 0.846*365 * target_e * borex_exp_100tday  # exposure for phase 2 in # of targets - days
+  #exposure = borex_exp_100tday * 100*1000
 
   # Set up borexino features.
   borex_bins = data[:,2]
@@ -233,7 +239,7 @@ def main():
   signal += corr
 
   # Prepare some sample event rate plots.
-  plot = False
+  plot = True
   if plot == True:
     # Construct test fit
     print("plotting...")
@@ -245,29 +251,26 @@ def main():
     plt.errorbar(borex_bins, obs, yerr=err, color="k",
                  ls="None", marker='.', label='Borexino Phase II Data')
     #plt.plot(borex_bins, borex_fit, color="r", label="Borexino Fit")
-    plt.plot(borex_bins, signal, label="SI", drawstyle='steps-mid',
+    plt.plot(borex_bins, signal, label="SI",
              ls='solid', color='crimson', linewidth=2)
-    plt.plot(borex_bins, nsi, label=r"NSI ($\epsilon^{e,L}_{ee}=0.3$, $\epsilon^{e,R}_{ee}=-0.4$)", drawstyle='steps-mid',
-             ls='dashed', color='crimson', linewidth=2)
-    plt.plot(borex_bins, polonium, label=r"$^{210}$Po", drawstyle='steps-mid', color='y')
-    plt.plot(borex_bins, bismuth, label=r"$^{210}$Bi", drawstyle='steps-mid', color='b')
-    plt.plot(borex_bins, carbon11, label=r"$^{11}$C", drawstyle='steps-mid', color='g')
-    plt.plot(borex_bins, krypton85, label=r"$^{85}$Kr", drawstyle='steps-mid', color='m')
-    plt.xlabel(r'$E_R$ [KeV]', fontsize=13)
+    plt.plot(borex_bins, nsi, label=r"NSI ($\epsilon^{e,L}_{ee}=0.3$, $\epsilon^{e,R}_{ee}=-0.4$)",
+             ls='dotted', color='crimson', linewidth=2)
+    plt.plot(borex_bins, polonium, label=r"$^{210}$Po", color='y')
+    plt.plot(borex_bins, bismuth, label=r"$^{210}$Bi", color='b')
+    plt.plot(borex_bins, carbon11, label=r"$^{11}$C", color='g')
+    plt.plot(borex_bins, krypton85, label=r"$^{85}$Kr", color='m')
+    plt.xlabel(r'$E_R$ [keV]', fontsize=13)
     plt.ylabel('Events', fontsize=13)
     plt.yscale('log')
     #plt.xscale('log')
     plt.ylim((5e2,1e6))
     #plt.ylim((1e4,6e4))
     plt.xlim((550,1000))
-    plt.legend(loc="upper right", framealpha=1.0)
+    plt.legend(loc="upper right", framealpha=1.0, fontsize=11)
     plt.tight_layout()
-    plt.savefig("plots/rates/borexino/borexino_solar_spectrum.png")
-    plt.savefig("plots/rates/borexino/borexino_solar_spectrum.pdf")
+    plt.show()
+    plt.close()
 
-    plt.clf()
-    plt.plot(borex_bins, res, ls="none",marker='o')
-    plt.savefig("plots/rates/borexino/residuals.png")
 
 
   # Define likelihoods.
@@ -316,10 +319,10 @@ def main():
 
 
   # run Multinest
-  pymultinest.run(LogLikelihood, MinimalPrior, n_params, outputfiles_basename=text_string, resume=False, verbose=True,
-                  n_live_points=5000, evidence_tolerance=0.5, sampling_efficiency=0.8)
-  json.dump(params_minimal, open(json_string, 'w'))  # save parameter names
-  print("Saving to: \n" + text_string)
+  #pymultinest.run(LogLikelihood, MinimalPrior, n_params, outputfiles_basename=text_string, resume=False, verbose=True,
+   #               n_live_points=5000, evidence_tolerance=0.5, sampling_efficiency=0.8)
+  #json.dump(params_minimal, open(json_string, 'w'))  # save parameter names
+  #print("Saving to: \n" + text_string)
 
 
 

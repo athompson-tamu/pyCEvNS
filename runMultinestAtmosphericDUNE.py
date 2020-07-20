@@ -9,6 +9,9 @@ import matplotlib.gridspec as gridspec
 import matplotlib.patheffects as PathEffects
 from matplotlib import cm
 from matplotlib.ticker import LinearLocator, FormatStrFormatter
+from matplotlib.pylab import rc
+rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
+rc('text', usetex=True)
 
 import pymultinest
 import mpi4py
@@ -119,7 +122,7 @@ def main():
                        335.00, 376.00, 422.00, 473.00, 531.00, 596.00, 668.00, 750.00, 841.00, 944.00])
                        #1059.00, 1189.00, 1334.00, 1496.00, 1679.00, 1884.00, 2113.00, 2371.00, 2661.00, 2985.00])
     z_bins = np.linspace(-1, 1,n_z + 1)
-    nsi1 = EventsGenerator([0, 0, 0, 0, 0, 0.05, 0, 0, pi/2, 1.5*pi], exposure, flux_list, osc_factory)
+    nsi1 = EventsGenerator([-0.2, 0, 0.2, 0, 0.2, 0.0, 0, 0, 0, 1.5*pi], exposure, flux_list, osc_factory)
     print("sum NSI: ", np.sum(nsi1))
     print("sum SI: ", np.sum(sm_events))
     plt.rcParams.update({'font.size': 7})
@@ -130,6 +133,7 @@ def main():
     fig.subplots_adjust(hspace=0.1, wspace=0.45)
     gs = gridspec.GridSpec(1, 3)
     ticks = np.linspace(0,60,6)
+    ticks_diff = np.linspace(0,15,6)
 
     # Plot SM
     ax = fig.add_subplot(gs[0, 0], polar=True)
@@ -160,10 +164,11 @@ def main():
     R, Z = np.meshgrid(e_bins, np.arccos(z_bins))
     c1 = ax.pcolormesh(Z, R, np.fabs(nsi1 - sm_events), cmap=cmap)
     plt.pcolormesh(-Z, R, np.fabs(nsi1 - sm_events), cmap=cmap)
-    fig.colorbar(c1, orientation="horizontal", pad=0.12, ticks=ticks)
+    fig.colorbar(c1, orientation="horizontal", pad=0.12, ticks=ticks_diff)
     plt.grid()
-
-    plt.savefig("plots/rates/dune/png/polar_plot_dune_atmos_phase_test.png")
+    plt.show()
+    plt.close()
+    #plt.savefig("plots/rates/dune/png/polar_plot_dune_atmos_phase_test.png")
     #plt.savefig("plots/rates/dune/pdf/polar_plot_dune_atmos.pdf")
 
 

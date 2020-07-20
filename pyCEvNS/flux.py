@@ -717,7 +717,7 @@ class NeutrinoFluxFactory:
                 return (3 * ((evv / 52) ** 2) - 2 * ((evv / 52) ** 3)) / 26
             ev = np.linspace(0.001, 52, 100)
             return NeutrinoFlux(continuous_fluxes={'ev': ev, 'e': de(ev), 'mubar': dmubar(ev)},
-                                delta_fluxes={'mu': [(29, 1)]}, norm=1.13 * (10 ** 7)) ## default unit is /(cm^2*s)
+                                delta_fluxes={'mu': [(29.8, 1)]}, norm=1.13 * (10 ** 7)) ## default unit is /(cm^2*s)
         if flux_name == 'coherent_delayed':
             def de(evv):
                 return (3 * ((evv / (2 / 3 * 52)) ** 2) - 2 * ((evv / (2 / 3 * 52)) ** 3)) / 29.25
@@ -726,7 +726,7 @@ class NeutrinoFluxFactory:
             ev = np.linspace(0.001, 52, kwargs['npoints'] if 'npoints' in kwargs else 100)
             return NeutrinoFlux(continuous_fluxes={'ev': ev, 'e': de(ev), 'mubar': dmubar(ev)}, norm=1.13 * (10 ** 7))
         if flux_name == 'coherent_prompt':
-            return NeutrinoFlux(delta_fluxes={'mu': [(29, 1)]}, norm=1.13 * (10 ** 7))
+            return NeutrinoFlux(delta_fluxes={'mu': [(29.8, 1)]}, norm=1.13 * (10 ** 7))
         if flux_name == 'far_beam_nu':
             far_beam_txt = 'data/dune_beam_fd_nu_flux_120GeVoptimized.txt'
             f_beam = np.genfromtxt(pkg_resources.resource_filename(__name__, far_beam_txt), delimiter=',')
